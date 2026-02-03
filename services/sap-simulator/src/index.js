@@ -97,6 +97,7 @@ app.post('/accounts/:fxpId/credit', (req, res) => {
 
 /**
  * Process debit from FXP account
+ * AM04 Trigger: Amounts ending in 99999 (e.g., 99999, 199999) simulate insufficient funds
  */
 app.post('/accounts/:fxpId/debit', (req, res) => {
     const { fxpId } = req.params;
@@ -104,16 +105,46 @@ app.post('/accounts/:fxpId/debit', (req, res) => {
 
     logger.info({ fxpId, amount, uetr }, 'Processing debit');
 
+    // AM04 Trigger: Amounts ending in 99999 simulate insufficient funds
+    // Reference: docs/UNHAPPY_FLOWS.md
+    const amountNum = parseFloat(amount);
+    if (amountNum.toString().endsWith('99999') || amountNum === 99999) {
+        logger.warn({ fxpId, amount, uetr }, 'AM04 Trigger: Insufficient funds');
+        return res.status(422).json({
+            error: 'AM04',
+            statusReasonCode: 'AM04',  // ISO 20022 ExternalStatusReason1Code
+            message: 'Insufficient funds in FXP settlement account',
+            uetr,
+            fxpId,
+            requestedAmount: amount,
+        });
+    }
+
     let account = fxpAccounts.get(fxpId);
     if (!account) {
-        return res.status(404).json({ error: 'Account not found' });
+        account = {
+            fxpId,
+            accountNumber: `SAP${config.sapId.toUpperCase()}${fxpId.toUpperCase().slice(0, 6)}`,
+            currency: config.sapCurrency,
+            balance: 1000000, // Default balance
+        };
+        fxpAccounts.set(fxpId, account);
     }
 
-    if (account.balance < amount) {
-        return res.status(400).json({ error: 'Insufficient funds' });
+    if (account.balance < amountNum) {
+        logger.warn({ fxpId, amount, balance: account.balance, uetr }, 'Insufficient funds');
+        return res.status(422).json({
+            error: 'AM04',
+            statusReasonCode: 'AM04',
+            message: 'Insufficient funds in FXP settlement account',
+            uetr,
+            fxpId,
+            requestedAmount: amount,
+            availableBalance: account.balance,
+        });
     }
 
-    account.balance -= parseFloat(amount);
+    account.balance -= amountNum;
 
     res.json({
         success: true,

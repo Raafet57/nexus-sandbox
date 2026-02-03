@@ -49,6 +49,12 @@ const navItems: NavItem[] = [
         description: "PSP payment flow",
     },
     {
+        icon: IconCircleX,
+        label: "Demo Scenarios",
+        path: "/demo",
+        description: "Unhappy flows testing",
+    },
+    {
         icon: IconBuilding,
         label: "PSP Dashboard",
         path: "/psp",

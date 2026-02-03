@@ -19,6 +19,7 @@ import { PSPPage } from "./pages/PSP";
 import { IPSPage } from "./pages/IPS";
 import { PDOPage } from "./pages/PDO";
 import { PaymentsExplorer } from "./pages/PaymentsExplorer";
+import { UnhappyFlowsDemo } from "./pages/UnhappyFlowsDemo";
 
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
           <Route path="/" element={<AppLayout />}>
             <Route index element={<Navigate to="/payment" replace />} />
             <Route path="payment" element={<PaymentPage />} />
+            <Route path="demo" element={<UnhappyFlowsDemo />} />
             <Route path="fxp" element={<FXPPage />} />
             <Route path="sap" element={<SAPPage />} />
             <Route path="psp" element={<PSPPage />} />

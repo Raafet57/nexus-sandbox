@@ -155,7 +155,7 @@ Rejection occurs → pacs.002 RJCT flows backward
 | BE23 (Proxy not found) | ✅ Implemented | PDO simulator returns BE23 code |
 | AB04 (Quote expired) | ✅ Implemented | Quote expiry check in gateway |
 | AM02 (Amount limit) | ✅ Implemented | Amounts > 50K trigger AM02 |
-| AM04 (Insufficient funds) | ⚠️ Partial | Mock SAP balances |
+| AM04 (Insufficient funds) | ✅ Implemented | Amounts ending in 99999 trigger |
 | AC04 (Closed account) | ✅ Implemented | Trigger value: +60999999999 |
 | RR04 (Regulatory block) | ✅ Implemented | Trigger value: +62999999999 |
 | RC11 (Invalid SAP) | ✅ Implemented | SAP mismatch in validation |
@@ -170,29 +170,22 @@ Rejection occurs → pacs.002 RJCT flows backward
 
 Use these values in the sandbox to trigger specific error scenarios:
 
-| Proxy Value | Error Code | Description |
-|-------------|------------|-------------|
-| `+66999999999` | BE23 | Account/Proxy Invalid |
-| `+60999999999` | AC04 | Account Closed |
-| `+62999999999` | RR04 | Regulatory/AML Block |
-| Amount > 50,000 | AM02 | IPS Limit Exceeded |
-| Reuse UETR | DUPL | Duplicate Payment |
-| Wait 10 min after quote | AB04 | Quote Expired |
+| Scenario | Trigger | Expected Code | Where |
+|----------|---------|---------------|-------|
+| Proxy not found | `+66999999999` | BE23 | Phone number |
+| Account closed | `+60999999999` | AC04 | Phone number |
+| Regulatory block | `+62999999999` | RR04 | Phone number |
+| Amount limit | Amount > 50,000 | AM02 | Amount field |
+| Insufficient funds | Amount ending in 99999 | AM04 | Amount field |
+| Quote expired | Wait 10+ minutes | AB04 | Time-based |
+| Duplicate payment | Resubmit same UETR | DUPL | Re-submit |
 
----
+## 6. Demo Page
 
-## 5. Test Trigger Values
-
-Use these values in the sandbox to trigger specific error scenarios:
-
-| Scenario | Trigger | Expected Code |
-|----------|---------|---------------|
-| Proxy not found | `+66999999999` | `BE23` |
-| Quote expired | Wait 10+ minutes | `AB04` |
-| Amount exceeds limit | Amount > 50,000 | `AM02` |
-| Account closed | `ACCOUNT_CLOSED` | `AC04` |
-| Sanctions hit | `SANCTION_HIT` | `RR04` |
-| Duplicate UETR | Resubmit same UETR | `DUPL` |
+Navigate to `/demo` in the dashboard to access the **Demo Scenarios** page with:
+- Pre-configured test buttons for each error type
+- Complete trigger values reference table
+- Direct links to payment flow
 
 ---
 
@@ -205,3 +198,4 @@ Use these values in the sandbox to trigger specific error scenarios:
 ---
 
 Created by [Siva Subramanian](https://linkedin.com/in/sivasub987)
+

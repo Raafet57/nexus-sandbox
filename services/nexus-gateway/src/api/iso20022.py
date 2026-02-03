@@ -656,6 +656,11 @@ async def validate_pacs008(parsed: dict, db: AsyncSession) -> PaymentValidationR
             if amount > Decimal("50000"):
                 errors.append(f"Amount {amount} exceeds IPS transaction limit (50,000)")
                 status_reason = STATUS_AMOUNT_LIMIT
+            # 4b. AM04 Trigger: Amounts ending in 99999 simulate insufficient funds
+            # Reference: docs/UNHAPPY_FLOWS.md - AM04 trigger
+            elif str(int(amount)).endswith("99999"):
+                errors.append(f"Insufficient funds in source account for amount {amount}")
+                status_reason = STATUS_INSUFFICIENT_FUNDS
         except:
             pass
     
