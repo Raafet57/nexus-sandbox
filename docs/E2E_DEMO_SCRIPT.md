@@ -12,7 +12,7 @@ This document provides step-by-step instructions for demonstrating the complete 
    docker-compose up -d
    ```
 
-2. **Access the dashboard**: Open `http://localhost:3000`
+2. **Access the dashboard**: Open `http://localhost:8080`
 
 3. **Verify API status**: Green "API: connected" badge in header
 

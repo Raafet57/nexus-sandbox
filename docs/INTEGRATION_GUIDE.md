@@ -166,9 +166,9 @@ Refer to `/v1/iso20022/pacs008` for submitting payment instructions. The gateway
 ### 5.2. Dashboard Verification
 
 View your transaction lifecycle at:
-- **Payment Dashboard**: `http://localhost:3000`
-- **ISO Explorer**: `http://localhost:3000/messages`
-- **Mesh Visualizer**: `http://localhost:3000/mesh`
+- **Payment Dashboard**: `http://localhost:8080`
+- **ISO Explorer**: `http://localhost:8080/messages`
+- **Mesh Visualizer**: `http://localhost:8080/mesh`
 
 ---
 
@@ -184,4 +184,4 @@ For the complete list, see `docs/assumptions/09_actor_integration.md`.
 
 ---
 
-**Questions?** Check the API docs at `/docs` (Swagger UI) or `/redoc`.
+**Questions?** Check the API docs at `http://localhost:8080/api/docs` (Swagger UI) or `/api/redoc`.
