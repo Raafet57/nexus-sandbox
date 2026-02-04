@@ -55,6 +55,12 @@ docker compose -f docker-compose.lite.yml up -d
 
 ![Dashboard Screenshot](./docs/screenshots/mesh.png)
 
+### 🎬 Demo Recording
+
+https://github.com/user-attachments/assets/demo-recording.webm
+
+<video src="./docs/assets/demo-recording.webm" controls width="100%" title="Nexus Sandbox Demo"></video>
+
 ### 📖 Documentation Links
 - [**Usage Guide**](./docs/USAGE_GUIDE.md): Start here to simulate your first payment.
 - [**Integration Guide**](./docs/INTEGRATION_GUIDE.md): Connect your own PSP/FXP/IPS to the sandbox.

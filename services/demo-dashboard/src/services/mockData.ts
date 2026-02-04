@@ -143,7 +143,7 @@ class MockPaymentStore {
             completedAt: status === "ACCC" ? now : undefined,
             messages: [
                 {
-                    messageType: "pacs.008.001.10",
+                    messageType: "pacs.008.001.13",
                     direction: "outbound",
                     xml: pacs008Xml,
                     timestamp: now,
@@ -221,7 +221,7 @@ class MockPaymentStore {
 
     private generatePacs008Xml(params: { uetr: string; quoteId: string; exchangeRate: number; sourceAmount: number; sourceCurrency: string; destinationAmount: number; destinationCurrency: string; debtorName: string; debtorAccount: string; debtorAgentBic: string; creditorName: string; creditorAccount: string; creditorAgentBic: string }, timestamp: string): string {
         return `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.10">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
     <GrpHdr>
       <MsgId>NEXUS-${Date.now()}</MsgId>

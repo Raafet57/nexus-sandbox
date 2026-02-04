@@ -209,33 +209,33 @@ INSERT INTO address_types (country_code, code, display_name, requires_proxy_reso
 
 -- SGD rates
 INSERT INTO fx_rates (fxp_id, source_currency, destination_currency, base_rate, valid_from, valid_until)
-SELECT fxp_id, 'SGD', 'THB', 25.85, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC'
+SELECT fxp_id, 'SGD', 'THB', 25.85, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
 UNION ALL
-SELECT fxp_id, 'SGD', 'MYR', 3.50, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC'
+SELECT fxp_id, 'SGD', 'MYR', 3.50, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
 UNION ALL
-SELECT fxp_id, 'SGD', 'PHP', 42.50, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC'
+SELECT fxp_id, 'SGD', 'PHP', 42.50, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
 UNION ALL
-SELECT fxp_id, 'SGD', 'IDR', 11500.00, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC'
+SELECT fxp_id, 'SGD', 'IDR', 11500.00, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
 UNION ALL
-SELECT fxp_id, 'SGD', 'INR', 62.50, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC';
+SELECT fxp_id, 'SGD', 'INR', 62.50, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC';
 
 -- THB rates (reverse)
 INSERT INTO fx_rates (fxp_id, source_currency, destination_currency, base_rate, valid_from, valid_until)
-SELECT fxp_id, 'THB', 'SGD', 0.0387, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC'
+SELECT fxp_id, 'THB', 'SGD', 0.0387, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
 UNION ALL
-SELECT fxp_id, 'THB', 'MYR', 0.135, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC';
+SELECT fxp_id, 'THB', 'MYR', 0.135, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC';
 
 -- MYR rates
 INSERT INTO fx_rates (fxp_id, source_currency, destination_currency, base_rate, valid_from, valid_until)
-SELECT fxp_id, 'MYR', 'SGD', 0.286, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC'
+SELECT fxp_id, 'MYR', 'SGD', 0.286, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
 UNION ALL
-SELECT fxp_id, 'MYR', 'THB', 7.39, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-ABC';
+SELECT fxp_id, 'MYR', 'THB', 7.39, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC';
 
 -- Additional FXP rates with different spreads
 INSERT INTO fx_rates (fxp_id, source_currency, destination_currency, base_rate, valid_from, valid_until)
-SELECT fxp_id, 'SGD', 'THB', 25.80, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-XYZ'
+SELECT fxp_id, 'SGD', 'THB', 25.80, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-XYZ'
 UNION ALL
-SELECT fxp_id, 'SGD', 'MYR', 3.48, NOW(), NOW() + INTERVAL '1 hour' FROM fxps WHERE fxp_code = 'FXP-XYZ';
+SELECT fxp_id, 'SGD', 'MYR', 3.48, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-XYZ';
 
 -- =============================================================================
 -- PROXY REGISTRATIONS (Demo data for PDO)

@@ -27,12 +27,21 @@ import {
   IconHistory,
   IconCode,
 } from "@tabler/icons-react";
-import { listPayments, getPaymentEvents } from "../services/api";
+import { listPayments, getPaymentEvents, getIsoTemplates } from "../services/api";
 import { useEffect } from "react";
 
 
-const MESSAGES = {
+interface IsoMessageTemplate {
+  messageType: string;
+  name: string;
+  description: string;
+  sample: string;
+  sample_xml?: string; // API returns sample_xml
+}
+
+const ISO_TEMPLATES: Record<string, IsoMessageTemplate> = {
   "acmt.023": {
+    messageType: "acmt.023",
     name: "Identification Verification Request",
     description: "Proxy resolution request sent to PDO",
     sample: `<?xml version="1.0" encoding="UTF-8"?>
@@ -70,6 +79,7 @@ const MESSAGES = {
 </Document>`,
   },
   "acmt.024": {
+    messageType: "acmt.024",
     name: "Identification Verification Report",
     description: "Proxy resolution response from PDO",
     sample: `<?xml version="1.0" encoding="UTF-8"?>
@@ -80,34 +90,25 @@ const MESSAGES = {
       <CreDtTm>2026-02-03T10:30:01Z</CreDtTm>
     </Assgnmt>
     <Rpt>
-      <OrgnlVrfctn>
-        <Id>+66812345678</Id>
-        <Tp>MOBL</Tp>
-      </OrgnlVrfctn>
-      <Updtd>
-        <Nm>SOMCHAI THONGCHAI</Nm>
+      <OrgnlId>REQ20260204-999</OrgnlId>
+      <Vrfctn>true</Vrfctn>
+      <UpdtdPtyAndAcctId>
+        <Pty><Nm>Jane Smith</Nm></Pty>
         <Acct>
-          <Id>
-            <Othr>
-              <Id>****5678</Id>
-            </Othr>
-          </Id>
+          <Id><Othr><Id>0987654321</Id></Othr></Id>
         </Acct>
-        <Agt>
-          <FinInstnId>
-            <BICFI>KASITHBK</BICFI>
-          </FinInstnId>
-        </Agt>
-      </Updtd>
+        <Agt><FinInstnId><BICFI>BKKBTHBK</BICFI></FinInstnId></Agt>
+      </UpdtdPtyAndAcctId>
     </Rpt>
   </IdVrfctnRpt>
 </Document>`,
   },
   "pacs.008": {
+    messageType: "pacs.008",
     name: "FI To FI Customer Credit Transfer",
     description: "Payment instruction message",
     sample: `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
     <GrpHdr>
       <MsgId>PACS008-2026-0203-001</MsgId>
@@ -145,6 +146,7 @@ const MESSAGES = {
 </Document>`,
   },
   "pacs.002": {
+    messageType: "pacs.002",
     name: "Payment Status Report",
     description: "Payment confirmation/rejection status",
     sample: `<?xml version="1.0" encoding="UTF-8"?>
@@ -169,6 +171,157 @@ const MESSAGES = {
   </FIToFIPmtStsRpt>
 </Document>`,
   },
+  "pacs.028": {
+    messageType: "pacs.028",
+    name: "FI To FI Payment Status Request",
+    description: "Status enquiry for a transaction",
+    sample: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.028.001.05">
+  <FIToFIPmtStsReq>
+    <GrpHdr>
+      <MsgId>QRY20260204-01</MsgId>
+      <CreDtTm>2026-02-04T18:05:00Z</CreDtTm>
+    </GrpHdr>
+    <TxInf>
+      <OrgnlUETR>91398cbd-0838-453f-b2c7-536e829f2b8e</OrgnlUETR>
+      <InstgAgt><FinInstnId><BICFI>DBSGSGSG</BICFI></FinInstnId></InstgAgt>
+    </TxInf>
+  </FIToFIPmtStsReq>
+</Document>`,
+  },
+  "camt.056": {
+    messageType: "camt.056",
+    name: "FI To FI Payment Cancellation Request",
+    description: "Request to cancel an incorrect payment",
+    sample: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.056.001.10">
+  <FIToFIPmtCxlReq>
+    <GrpHdr>
+      <MsgId>RCL20260204-01</MsgId>
+      <CreDtTm>2026-02-04T19:00:00Z</CreDtTm>
+    </GrpHdr>
+    <Underlyg>
+      <TxInf>
+        <OrgnlUETR>91398cbd-0838-453f-b2c7-536e829f2b8e</OrgnlUETR>
+        <CxlRsnInf><Rsn><Cd>DUPL</Cd></Rsn></CxlRsnInf>
+      </TxInf>
+    </Underlyg>
+  </FIToFIPmtCxlReq>
+</Document>`,
+  },
+  "camt.029": {
+    messageType: "camt.029",
+    name: "Resolution Of Investigation",
+    description: "Response to a cancellation request",
+    sample: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.029.001.11">
+  <RsltnOfInvstgtn>
+    <Assgnmt>
+      <MsgId>RSP20260204-01</MsgId>
+      <CreDtTm>2026-02-04T19:15:00Z</CreDtTm>
+    </Assgnmt>
+    <Sts><Conf>RJCR</Conf></Sts>
+    <CxlDetails>
+      <TxInfAndSts>
+        <OrgnlUETR>91398cbd-0838-453f-b2c7-536e829f2b8e</OrgnlUETR>
+        <CxlStsId>RJCR</CxlStsId>
+      </TxInfAndSts>
+    </CxlDetails>
+  </RsltnOfInvstgtn>
+</Document>`,
+  },
+  "camt.054": {
+    messageType: "camt.054",
+    name: "Bank to Customer Debit/Credit Notification",
+    description: "Reconciliation report for IPS Operators",
+    sample: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.054.001.08">
+  <BkToCstmrDbtCdtNtfctn>
+    <GrpHdr>
+      <MsgId>RECON-20260204</MsgId>
+      <CreDtTm>2026-02-04T23:59:59Z</CreDtTm>
+    </GrpHdr>
+    <Ntfctn>
+      <Id>RECON-001</Id>
+      <CreDtTm>2026-02-04T23:59:59Z</CreDtTm>
+      <Ntry>
+        <Amt Ccy="SGD">1000.00</Amt>
+        <Sts>BOOK</Sts>
+        <BkTxCd>
+          <Domn>
+            <Cd>PMNT</Cd>
+            <Fmly><Cd>ICDT</Cd></Fmly>
+          </Domn>
+        </BkTxCd>
+      </Ntry>
+    </Ntfctn>
+  </BkToCstmrDbtCdtNtfctn>
+</Document>`,
+  },
+  "camt.103": {
+    messageType: "camt.103",
+    name: "Create Reservation",
+    description: "Liquidity reservation request (Method 2a)",
+    sample: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.103.001.03">
+  <CretRsvatn>
+    <GrpHdr>
+      <MsgId>RSV20260204-001</MsgId>
+      <CreDtTm>2026-02-04T18:00:02Z</CreDtTm>
+    </GrpHdr>
+    <RsvatnId>RSV-TX-001</RsvatnId>
+    <CurRsvatn>
+      <Amt Ccy="THB">25000.00</Amt>
+      <Tp><Cd>AVLB</Cd></Tp>
+    </CurRsvatn>
+  </CretRsvatn>
+</Document>`,
+  },
+  "pain.001": {
+    messageType: "pain.001",
+    name: "Customer Credit Transfer Initiation",
+    description: "Payment initiation request (Method 3)",
+    sample: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.11">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>INIT20260204-123</MsgId>
+      <CreDtTm>2026-02-04T18:00:03Z</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <InitgPty><Nm>Destination IPS</Nm></InitgPty>
+    </GrpHdr>
+    <PmtInf>
+      <PmtInfId>P-INIT-01</PmtInfId>
+      <PmtMtd>TRF</PmtMtd>
+      <Dbtr><Nm>FXP ALPHA</Nm></Dbtr>
+      <CdtTrfTxInf>
+        <PmtId><EndToEndId>E2E-01</EndToEndId></PmtId>
+        <Amt><InstdAmt Ccy="THB">25000.00</InstdAmt></Amt>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>`,
+  },
+  "pacs.004": {
+    messageType: "pacs.004",
+    name: "Payment Return",
+    description: "Return of funds (reversal)",
+    sample: `<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.004.001.11">
+  <PmtRtr>
+    <GrpHdr>
+      <MsgId>RET20260204-001</MsgId>
+      <CreDtTm>2026-02-04T18:30:00Z</CreDtTm>
+    </GrpHdr>
+    <TxInf>
+      <RtrId>RTR-01</RtrId>
+      <OrgnlUETR>91398cbd-0838-453f-b2c7-536e829f2b8e</OrgnlUETR>
+      <RtrdIntrBkSttlmAmt Ccy="SGD">1000.00</RtrdIntrBkSttlmAmt>
+      <RtrRsnInf><Rsn><Cd>CUST</Cd></Rsn></RtrRsnInf>
+    </TxInf>
+  </PmtRtr>
+</Document>`,
+  },
 };
 
 const FIELD_MAPPINGS = [
@@ -184,6 +337,30 @@ export function MessagesPage() {
   const [selectedPaymentEvents, setSelectedPaymentEvents] = useState<import("../types").PaymentEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedUetr, setSelectedUetr] = useState<string | null>(null);
+
+  // Use state for dynamic templates, initializing with static ones
+  const [isoTemplates, setIsoTemplates] = useState<Record<string, IsoMessageTemplate>>(ISO_TEMPLATES);
+
+  useEffect(() => {
+    // Fetch dynamic templates from backend
+    const fetchTemplates = async () => {
+      try {
+        const templates = await getIsoTemplates();
+        // Map API response to internal shape (sample_xml -> sample)
+        const mapped: Record<string, IsoMessageTemplate> = {};
+        Object.entries(templates).forEach(([key, t]: [string, any]) => {
+          mapped[key] = {
+            ...t,
+            sample: t.sample_xml || t.sample
+          };
+        });
+        setIsoTemplates(mapped);
+      } catch (e) {
+        console.error("Failed to fetch message templates", e);
+      }
+    };
+    fetchTemplates();
+  }, []);
 
   useEffect(() => {
     if (activeMessage === "live") {
@@ -233,7 +410,7 @@ export function MessagesPage() {
       <Tabs value={activeMessage} onChange={(v) => setActiveMessage(v || "acmt.023")}>
         <Tabs.List>
           <Tabs.Tab value="live" leftSection={<IconHistory size={14} />}>Live Audit</Tabs.Tab>
-          {Object.entries(MESSAGES).map(([key]) => (
+          {Object.entries(isoTemplates).map(([key]) => (
             <Tabs.Tab key={key} value={key}>
               {key}
             </Tabs.Tab>
@@ -307,7 +484,7 @@ export function MessagesPage() {
           </SimpleGrid>
         </Tabs.Panel>
 
-        {Object.entries(MESSAGES).map(([key, msg]) => (
+        {Object.entries(isoTemplates).map(([key, msg]) => (
           <Tabs.Panel key={key} value={key} pt="md">
             <SimpleGrid cols={{ base: 1, lg: 2 }}>
               <Card>

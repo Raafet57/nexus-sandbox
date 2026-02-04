@@ -55,7 +55,7 @@ class IPSMembersResponse(BaseModel):
 
 @router.get("", response_model=IPSListResponse)
 async def list_ips_operators(
-    country_code: Optional[str] = Query(None, description="Filter by country"),
+    country_code: Optional[str] = Query(None, alias="countryCode", description="Filter by country"),
     db: AsyncSession = Depends(get_db)
 ):
     """

@@ -12,7 +12,7 @@ This module implements FX quote generation following the Nexus specification:
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -129,6 +129,50 @@ class IntermediaryAgentsResponse(BaseModel):
 # =============================================================================
 # Endpoints
 # =============================================================================
+
+@router.get(
+    "/quotes/{source_country}/{source_currency}/{destination_country}/{destination_currency}/{amount_currency}/{amount}",
+    response_model=QuotesResponse,
+    summary="Get Quotes (Path Params)",
+    description="Wrapper for Get Quotes using path parameters per Nexus documentation.",
+)
+async def get_quotes_path_params(
+    source_country: str = Path(..., min_length=2, max_length=2),
+    source_currency: str = Path(..., min_length=3, max_length=3),
+    destination_country: str = Path(..., min_length=2, max_length=2),
+    destination_currency: str = Path(..., min_length=3, max_length=3),
+    amount_currency: str = Path(..., min_length=3, max_length=3),
+    amount: float = Path(..., gt=0),
+    fin_inst_type_id: Optional[str] = Query(None, alias="finInstTypeId"),
+    fin_inst_id: Optional[str] = Query(None, alias="finInstId"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Get quotes using path parameters.
+    
+    Derives amount_type from amount_currency:
+    - If amount_currency matches source_currency -> SOURCE
+    - If amount_currency matches destination_currency -> DESTINATION
+    """
+    # Derive amount_type from amount_currency per Nexus spec
+    if amount_currency.upper() == source_currency.upper():
+        amount_type = "SOURCE"
+    elif amount_currency.upper() == destination_currency.upper():
+        amount_type = "DESTINATION"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"amount_currency ({amount_currency}) must match source ({source_currency}) or destination ({destination_currency}) currency"
+        )
+    
+    return await get_quotes(
+        source_country=source_country,
+        destination_country=destination_country,
+        amount=Decimal(str(amount)),
+        amount_type=amount_type,
+        source_psp_bic=None,
+        db=db,
+    )
+
 
 @router.get(
     "/quotes",
@@ -429,8 +473,8 @@ async def get_quotes(
     Reference: https://docs.nexusglobalpayments.org/fx-provision/quotes
     """,
 )
-async def get_quote(
-    quote_id: UUID = Path(..., description="Quote ID"),
+async def retrieve_single_quote(
+    quote_id: UUID = Path(..., alias="quoteId", description="Quote ID"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get a specific quote by ID."""
@@ -491,8 +535,8 @@ async def get_quote(
     These are used to populate IntrmyAgt1 and IntrmyAgt2 in the pacs.008 message.
     """,
 )
-async def get_intermediary_agents(
-    quote_id: UUID = Path(..., description="Quote ID"),
+async def accept_quote(
+    quote_id: UUID = Path(..., alias="quoteId", description="Quote ID"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get intermediary agent details for a quote."""

@@ -164,7 +164,7 @@ const UNHAPPY_FLOWS: FlowScenario[] = [
 
 // Sample XML messages
 const SAMPLE_PACS008 = `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
     <GrpHdr>
       <MsgId>MSG-2026020311450001</MsgId>

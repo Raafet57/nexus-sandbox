@@ -65,7 +65,7 @@ class PDOStatsResponse(BaseModel):
 
 @router.get("", response_model=PDOListResponse)
 async def list_pdos(
-    country_code: Optional[str] = Query(None, description="Filter by country"),
+    country_code: Optional[str] = Query(None, alias="countryCode", description="Filter by country"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -113,7 +113,7 @@ async def get_pdo(pdo_id: str, db: AsyncSession = Depends(get_db)):
     query = text("""
         SELECT pdo_id, name, country_code, supported_proxy_types
         FROM pdos
-        WHERE pdo_id = :pdo_id::uuid
+        WHERE pdo_id = CAST(:pdo_id AS uuid)
     """)
     try:
         result = await db.execute(query, {"pdo_id": pdo_id})

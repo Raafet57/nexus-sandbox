@@ -17,6 +17,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
     Title,
     Card,
@@ -66,12 +67,27 @@ import { getCountries, getQuotes, getPreTransactionDisclosure, resolveProxy, sub
 import type { Quote, FeeBreakdown, Country } from "../types";
 
 // ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Default PSP BICs by country (for demo fallback when proxy resolution doesn't return BIC)
+const DEFAULT_PSP_BIC: Record<string, string> = {
+    "SG": "DBSGSGSG",  // DBS Singapore
+    "TH": "BKKBTHBK",  // Bangkok Bank Thailand
+    "ID": "BMRIIDJA",  // Bank Mandiri Indonesia
+    "MY": "MAYBMYKL",  // Maybank Malaysia
+    "PH": "BPIKIDJX",  // BPI Philippines
+    "IN": "SBININBB",  // SBI India
+};
+
+// ============================================================================
 // COMPONENT
 // ============================================================================
 
 export function InteractiveDemo() {
     const theme = useMantineTheme();
     const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
+    const navigate = useNavigate();
 
     // Stepper state
     const [active, setActive] = useState(0);
@@ -119,10 +135,13 @@ export function InteractiveDemo() {
             const res = await resolveProxy("ID", "PHONE", "+6281234567890");
             setResolution({ recipientName: res.beneficiaryName || res.displayName || "Budi Santoso", recipientPsp: res.bankName || "Bank Mandiri" });
 
-            // Step 3-4: Get quotes
-            const quotesRes = await getQuotes("SG", "ID", 100000, "DESTINATION");
+            // Step 3-4: Get quotes (SG → ID corridor)
+            const quotesRes = await getQuotes("SG", "SGD", "ID", "IDR", 100000, "DESTINATION");
+            // Pre-select first quote
             setQuotes(quotesRes.quotes);
-            if (quotesRes.quotes.length === 0) throw new Error("No quotes available");
+            if (quotesRes.quotes.length === 0) {
+                throw new Error("No quotes available");
+            }
 
             // Step 5-6: Select best quote
             setActive(1);
@@ -151,7 +170,7 @@ export function InteractiveDemo() {
                 debtorAgentBic: "DBSGSGSG",
                 creditorName: "Budi Santoso",
                 creditorAccount: "+6281234567890",
-                creditorAgentBic: "BKKBTHBK",
+                creditorAgentBic: "BMRIIDJA",
             };
 
             const response = await submitPacs008(pacs008Params);
@@ -213,8 +232,10 @@ export function InteractiveDemo() {
             const res = await resolveProxy(destCountry, proxyType, proxyValue);
             setResolution({ recipientName: res.beneficiaryName || res.displayName || "Demo Recipient", recipientPsp: res.bankName });
 
-            // Then get quotes
-            const quotesRes = await getQuotes(sourceCountry, destCountry, amount, amountType);
+            // Then get quotes - use currencies from selected countries
+            const sourceCurrency = sourceCountryData?.currencies?.[0]?.currencyCode || "SGD";
+            const destCurrency = destCountryData?.currencies?.[0]?.currencyCode || "IDR";
+            const quotesRes = await getQuotes(sourceCountry, sourceCurrency, destCountry, destCurrency, amount, amountType);
             setQuotes(quotesRes.quotes);
 
             if (quotesRes.quotes.length === 0) {
@@ -288,7 +309,7 @@ export function InteractiveDemo() {
                 debtorAgentBic: "DBSGSGSG", // DBS Singapore
                 creditorName: resolution.recipientName || "Demo Recipient",
                 creditorAccount: proxyValue,
-                creditorAgentBic: resolution.recipientPsp || "BKKBTHBK", // Bangkok Bank (example)
+                creditorAgentBic: resolution.recipientPsp || DEFAULT_PSP_BIC[destCountry] || "BMRIIDJA",
                 scenarioCode: scenario !== "happy" ? scenario : undefined,
             };
 
@@ -639,7 +660,7 @@ export function InteractiveDemo() {
                                         <ScrollArea h={300} type="always" offsetScrollbars>
                                             <Code block style={{ whiteSpace: "pre", fontSize: "0.7rem", backgroundColor: 'transparent' }}>
                                                 {`<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.10">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
     <GrpHdr>
       <MsgId>NEXUS-${Date.now()}</MsgId>
@@ -653,16 +674,16 @@ export function InteractiveDemo() {
         <EndToEndId>E2E-${Date.now()}</EndToEndId>
         <UETR>[[Generated on Submit]]</UETR>
       </PmtId>
-      <IntrBkSttlmAmt Ccy="${ptd.sourceCurrency}">${ptd.senderPrincipal}</IntrBkSttlmAmt>
-      <XchgRate>${selectedQuote.exchangeRate}</XchgRate>
+      <IntrBkSttlmAmt Ccy="${ptd?.sourceCurrency ?? 'SGD'}">${ptd?.senderPrincipal ?? '0.00'}</IntrBkSttlmAmt>
+      <XchgRate>${selectedQuote?.exchangeRate ?? '1.0000'}</XchgRate>
       <Dbtr><Nm>Demo Sender</Nm></Dbtr>
       <DbtrAcct><Id><Othr><Id>SG1234567890</Id></Othr></Id></DbtrAcct>
       <DbtrAgt><FinInstnId><BICFI>DBSGSGSG</BICFI></FinInstnId></DbtrAgt>
-      <CdtrAgt><FinInstnId><BICFI>${resolution?.recipientPsp || "BKKBTHBK"}</BICFI></FinInstnId></CdtrAgt>
+      <CdtrAgt><FinInstnId><BICFI>${resolution?.recipientPsp || DEFAULT_PSP_BIC[destCountry] || "BMRIIDJA"}</BICFI></FinInstnId></CdtrAgt>
       <Cdtr><Nm>${resolution?.recipientName || "Demo Recipient"}</Nm></Cdtr>
       <CdtrAcct><Id><Othr><Id>${proxyValue}</Id></Othr></Id></CdtrAcct>
       <SplmtryData>
-        <Envlp><NxsQtId>${selectedQuote.quoteId}</NxsQtId></Envlp>
+        <Envlp><NxsQtId>${selectedQuote?.quoteId ?? 'QUOTE-ID'}</NxsQtId></Envlp>
       </SplmtryData>
     </CdtTrfTxInf>
   </FIToFICstmrCdtTrf>
@@ -691,10 +712,12 @@ export function InteractiveDemo() {
                     {/* Step 4: Lifecycle Trace */}
                     <Stepper.Completed>
                         <Stack gap="md" mt="xl">
-                            {paymentResult && paymentResult.status === "ACCC" ? (
+                            {paymentResult && (paymentResult.status === "ACCC" || paymentResult.status === "ACSP") ? (
                                 <>
-                                    <Alert icon={<IconCheck size={18} />} color="green" title="Payment Completed">
-                                        Settlement confirmed. Recipient has been credited.
+                                    <Alert icon={<IconCheck size={18} />} color="green" title={paymentResult.status === "ACCC" ? "Payment Completed" : "Settlement in Progress"}>
+                                        {paymentResult.status === "ACCC"
+                                            ? "Settlement confirmed. Recipient has been credited."
+                                            : "Payment accepted by Nexus. Settlement is in progress."}
                                     </Alert>
 
                                     <Card withBorder p="md">
@@ -706,8 +729,7 @@ export function InteractiveDemo() {
                                             {paymentResult.uetr}
                                         </Code>
                                         <Button
-                                            component="a"
-                                            href={`#/explorer?uetr=${paymentResult.uetr}`}
+                                            onClick={() => navigate(`/explorer?uetr=${paymentResult.uetr}`)}
                                             variant="light"
                                             size="xs"
                                             mt="sm"
@@ -756,8 +778,7 @@ export function InteractiveDemo() {
                                             {paymentResult.uetr}
                                         </Code>
                                         <Button
-                                            component="a"
-                                            href={`#/explorer?uetr=${paymentResult.uetr}`}
+                                            onClick={() => navigate(`/explorer?uetr=${paymentResult.uetr}`)}
                                             variant="light"
                                             size="xs"
                                             mt="sm"

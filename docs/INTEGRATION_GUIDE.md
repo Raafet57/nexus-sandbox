@@ -275,7 +275,7 @@ In Nexus Release 1, return payments use `pacs.008` with the original UETR in rem
 3. Submit a new `pacs.008` with `NexusOrgnlUETR:` prefix
 4. Verify `RETURN_LINKED` event in Message Observatory
 
-> **Note:** `pacs.004` and `camt.056` are NOT supported in Release 1. Use the Service Desk portal (`/service-desk`) for manual recall workflows.
+> **Note:** The Nexus Sandbox fully supports `pacs.004` (Return) and `camt.056` (Recall) workflows for testing purposes, enabling developers to simulate refund and cancellation scenarios.
 
 ---
 

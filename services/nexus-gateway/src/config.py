@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     # Retry settings
     max_retries: int = 3
     
+    # Sandbox Demo Defaults
+    # These are used when XML parsing returns None for required fields
+    demo_debtor_name: str = "Demo Sender"
+    demo_debtor_account: str = "SG1234567890"
+    demo_creditor_name: str = "Demo Recipient"
+    demo_creditor_account: str = "TH9876543210"
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

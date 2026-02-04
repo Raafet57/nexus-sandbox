@@ -48,7 +48,7 @@ class PSPPaymentSummary(BaseModel):
 
 @router.get("", response_model=PSPListResponse)
 async def list_psps(
-    country_code: Optional[str] = Query(None, description="Filter by country code"),
+    country_code: Optional[str] = Query(None, alias="countryCode", description="Filter by country code"),
     db: AsyncSession = Depends(get_db)
 ):
     """

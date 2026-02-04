@@ -149,40 +149,79 @@ function formatXml(xml: string): string {
 
 /**
  * XML Syntax Highlighter Component
+ * Uses dark-mode compatible colors (VS Code Dark+ theme)
+ * 
+ * Uses placeholder tokens to prevent regex from matching inserted HTML spans
  */
 function XmlHighlighter({ xml }: { xml: string }) {
     const formatted = formatXml(xml);
 
-    // Simple regex-based highlighting
-    const highlighted = formatted
+    // Use unique placeholders that won't be matched by subsequent regex
+    // These get replaced with actual HTML at the very end
+    const SPAN_OPEN = "___SPAN_OPEN___";
+    const SPAN_CLOSE = "___SPAN_CLOSE___";
+
+    // Escape HTML entities first
+    let highlighted = formatted
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        // Tags
-        .replace(/(&lt;\/?)([\w:]+)/g, '$1<span style="color: #22863a">$2</span>')
-        // Attributes
-        .replace(/(\s)([\w:]+)(=)/g, '$1<span style="color: #6f42c1">$2</span>$3')
-        // Attribute values
-        .replace(/(="[^"]*")/g, '<span style="color: #032f62">$1</span>')
-        // Text content between tags
-        .replace(/(&gt;)([^&]+)(&lt;\/)/g, '$1<span style="color: #24292e">$2</span>$3');
+        .replace(/>/g, "&gt;");
+
+    // Apply syntax highlighting with placeholders
+    // Tags (cyan-green for element names)
+    highlighted = highlighted.replace(
+        /(&lt;\/?)([a-zA-Z_][\w:-]*)/g,
+        `$1${SPAN_OPEN}color:#4EC9B0${SPAN_CLOSE}$2</span>`
+    );
+
+    // Attributes (light purple for attribute names) - only match before = sign
+    highlighted = highlighted.replace(
+        /(\s)([a-zA-Z_][\w:-]*)(=)/g,
+        `$1${SPAN_OPEN}color:#9CDCFE${SPAN_CLOSE}$2</span>$3`
+    );
+
+    // Attribute values (orange for strings)
+    highlighted = highlighted.replace(
+        /(="[^"]*")/g,
+        `${SPAN_OPEN}color:#CE9178${SPAN_CLOSE}$1</span>`
+    );
+
+    // Text content between tags (lighter color for text)
+    highlighted = highlighted.replace(
+        /(&gt;)([^&\n]+)(&lt;\/)/g,
+        `$1${SPAN_OPEN}color:#D4D4D4${SPAN_CLOSE}$2</span>$3`
+    );
+
+    // XML declaration (gray)
+    highlighted = highlighted.replace(
+        /(&lt;\?xml[^?]*\?&gt;)/g,
+        `${SPAN_OPEN}color:#808080${SPAN_CLOSE}$1</span>`
+    );
+
+    // Now replace placeholders with actual span tags
+    highlighted = highlighted
+        .replace(/___SPAN_OPEN___/g, '<span style="')
+        .replace(/___SPAN_CLOSE___/g, '">');
 
     return (
         <Code
             block
             style={{
                 fontSize: "12px",
-                lineHeight: 1.5,
-                backgroundColor: "#f6f8fa",
-                border: "1px solid #e1e4e8",
+                lineHeight: 1.6,
+                backgroundColor: "#1E1E1E",  // VS Code dark background
+                border: "1px solid #3C3C3C",
                 borderRadius: "6px",
-                padding: "12px",
-                fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+                padding: "16px",
+                fontFamily: "'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
+                color: "#D4D4D4",  // Default text color
+                overflowX: "auto",
             }}
             dangerouslySetInnerHTML={{ __html: highlighted }}
         />
     );
 }
+
 
 /**
  * Individual Message Card

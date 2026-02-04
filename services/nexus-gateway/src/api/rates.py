@@ -221,7 +221,7 @@ async def submit_rate(
     """,
 )
 async def withdraw_rate(
-    rate_id: UUID = Path(..., description="Rate ID to withdraw"),
+    rate_id: UUID = Path(..., alias="rateId", description="Rate ID to withdraw"),
     # TODO: Get FXP ID from JWT token
     fxp_code: str = "FXP-ABC",  # Temporary: should come from auth
     db: AsyncSession = Depends(get_db),

@@ -7,7 +7,7 @@ This module implements the discovery endpoints for Nexus-enabled countries,
 including available currencies, max amounts, address types, and PSP listings.
 """
 
-from typing import Any
+from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -185,6 +185,7 @@ async def retrieve_single_country(
     country_code: str = Path(
         ...,
         description="ISO 3166-1 alpha-2 country code",
+        alias="countryCode",
         min_length=2,
         max_length=2,
         pattern="^[A-Z]{2}$",
@@ -256,6 +257,7 @@ async def retrieve_country_psps(
     country_code: str = Path(
         ...,
         description="ISO 3166-1 alpha-2 country code",
+        alias="countryCode",
         min_length=2,
         max_length=2,
     ),
@@ -311,6 +313,7 @@ async def retrieve_address_types(
     country_code: str = Path(
         ...,
         description="ISO 3166-1 alpha-2 country code",
+        alias="countryCode",
         min_length=2,
         max_length=2,
     ),
@@ -344,6 +347,22 @@ async def retrieve_address_types(
 
 
 @router.get(
+    "/countries/{countryCode}/addressTypesAndInputs",
+    response_model=AddressTypesResponse,
+    include_in_schema=False,
+)
+async def retrieve_address_types_alias(
+    country_code: str = Path(..., alias="countryCode", min_length=2, max_length=2),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Alias for /address-types to match official API documentation path:
+    /countries/{countryCode}/addressTypesAndInputs/
+    """
+    return await retrieve_address_types(country_code, db)
+
+
+@router.get(
     "/countries/{country_code}/currencies/{currency_code}/max-amounts",
     summary="Retrieve Currency Max Amounts",
     description="""
@@ -356,8 +375,8 @@ async def retrieve_address_types(
     """,
 )
 async def retrieve_max_amounts(
-    country_code: str = Path(..., min_length=2, max_length=2),
-    currency_code: str = Path(..., min_length=3, max_length=3),
+    country_code: str = Path(..., alias="countryCode", min_length=2, max_length=2),
+    currency_code: str = Path(..., alias="currencyCode", min_length=3, max_length=3),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get max amount for a currency in a country."""
@@ -380,9 +399,47 @@ async def retrieve_max_amounts(
             status_code=404,
             detail=f"Currency {currency_code} not found for country {country_code}",
         )
-    
     return {
         "countryCode": country_code.upper(),
         "currencyCode": currency_code.upper(),
         "maxAmount": str(row.max_amount),
     }
+
+
+class UpdateCountryRequest(BaseModel):
+    """Request to update country details (Admin only)."""
+    max_amount: Optional[str] = Field(None, alias="maxAmount")
+    # Add other updatable fields as needed (e.g. required elements)
+
+
+@router.put(
+    "/countries/{country_code}",
+    summary="Update Country Details (Admin)",
+    description="""
+    Update configuration for a specific country.
+    
+    This is an administrative endpoint used to update limits or requirements.
+    """,
+    response_model=CountryInfo
+)
+async def update_country(
+    body: UpdateCountryRequest,
+    country_code: str = Path(..., alias="countryCode", min_length=2, max_length=2),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Update country configuration."""
+    
+    # Check if country exists
+    check_query = text("SELECT country_id FROM countries WHERE country_code = :cc")
+    result = await db.execute(check_query, {"cc": country_code.upper()})
+    if not result.fetchone():
+        raise HTTPException(status_code=404, detail="Country not found")
+
+    # Update logic (Stub implementation for Sandbox)
+    # In a real app, this would update DB columns
+    if body.max_amount:
+        # Mock update
+        pass
+
+    # Return updated info (re-using existing retrieval logic)
+    return await retrieve_single_country(country_code, db)

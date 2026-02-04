@@ -169,8 +169,23 @@ export function PaymentPage() {
 
                 const fetchQuotesData = async () => {
                     try {
-                        const data = await getQuotes(sourceCountry || "SG", selectedCountry, Number(amount), amountType);
-                        setQuotes(data.quotes);
+                        const sCountry = countries.find(c => c.countryCode === (sourceCountry || "SG"));
+                        const dCountry = countries.find(c => c.countryCode === selectedCountry);
+
+                        if (sCountry && dCountry) {
+                            const sourceCcy = sCountry.currencies[0].currencyCode;
+                            const destCcy = dCountry.currencies[0].currencyCode;
+
+                            const data = await getQuotes(
+                                sourceCountry || "SG",
+                                sourceCcy,
+                                selectedCountry,
+                                destCcy,
+                                Number(amount),
+                                amountType
+                            );
+                            setQuotes(data.quotes);
+                        }
                     } catch {
                         // No fallback - quotes come from FXP via backend
                         notifications.show({
@@ -212,7 +227,19 @@ export function PaymentPage() {
                 if (selectedCountry && sourceCountry && amount) {
                     const refreshQuotes = async () => {
                         try {
-                            const quotesData = await getQuotes(sourceCountry, selectedCountry, Number(amount), amountType);
+                            const sCountry = countries.find(c => c.countryCode === (sourceCountry || "SG"));
+                            const dCountry = countries.find(c => c.countryCode === selectedCountry);
+                            const sourceCcy = sCountry?.currencies[0]?.currencyCode || "SGD";
+                            const destCcy = dCountry?.currencies[0]?.currencyCode || "THB";
+
+                            const quotesData = await getQuotes(
+                                sourceCountry || "SG",
+                                sourceCcy,
+                                selectedCountry,
+                                destCcy,
+                                Number(amount),
+                                amountType
+                            );
                             setQuotes(quotesData.quotes);
                             advanceStep(5);
                         } catch {

@@ -45,26 +45,29 @@ export async function getCountries() {
 }
 
 // Quotes API - uses dynamic generation for mock mode
+// Quotes API - Uses path parameters per Nexus Spec
 export async function getQuotes(
     sourceCountry: string,
+    sourceCurrency: string,
     destCountry: string,
+    destCurrency: string,
     amount: number,
     amountType: "SOURCE" | "DESTINATION" = "SOURCE"
 ) {
+    // Determine amount currency based on type
+    const amountCurrency = amountType === "SOURCE" ? sourceCurrency : destCurrency;
+
     if (MOCK_ENABLED) {
         const quotes = mock.generateMockQuotes(sourceCountry, destCountry, amount, amountType);
         // Cache quotes for later fee lookup
         quotes.forEach(q => mock.cacheMockQuote(q));
         return { quotes };
     }
-    const params = new URLSearchParams({
-        sourceCountry,
-        destCountry,
-        amount: amount.toString(),
-        amountType
-    });
+
+    // Path: /quotes/{sourceCountry}/{sourceCurrency}/{destCountry}/{destCurrency}/{amountCurrency}/{amount}
+    // Backend derives amountType from comparing amountCurrency with source/dest currencies
     return fetchJSON<{ quotes: import("../types").Quote[] }>(
-        `/v1/quotes?${params.toString()}`
+        `/v1/quotes/${sourceCountry}/${sourceCurrency}/${destCountry}/${destCurrency}/${amountCurrency}/${amount}`
     );
 }
 
@@ -78,7 +81,7 @@ export async function getPreTransactionDisclosure(quoteId: string) {
         return fees as any;
     }
     return fetchJSON<import("../types").FeeBreakdown>(
-        `/v1/pre-transaction-disclosure?quote_id=${quoteId}`
+        `/v1/fees-and-amounts?quoteId=${quoteId}`
     );
 }
 
@@ -101,7 +104,7 @@ export async function getAddressTypes(countryCode: string) {
         };
     }
     return fetchJSON<{ countryCode: string; addressTypes: import("../types").AddressTypeWithInputs[] }>(
-        `/v1/countries/${countryCode}/address-types-and-inputs`
+        `/v1/countries/${countryCode}/addressTypesAndInputs`
     );
 }
 
@@ -168,14 +171,18 @@ export interface Pacs008Response {
     processedAt: string;
 }
 
-// Build ISO 20022 pacs.008 XML per Nexus specification
+// Build ISO 20022 pacs.008.001.13 XML per Nexus specification
+// Reference: XSD CreditTransferTransaction70 element order + Nexus docs for AgrdRate/QtId
 function buildPacs008Xml(params: Pacs008Params): string {
     const now = new Date().toISOString();
     const msgId = `MSG${Date.now()}`;
     const endToEndId = `E2E${Date.now()}`;
 
+    // Element order follows XSD CreditTransferTransaction70:
+    // PmtId → IntrBkSttlmAmt → IntrBkSttlmDt → InstdAmt → XchgRate → AgrdRate → ChrgBr 
+    //   → Dbtr → DbtrAcct → DbtrAgt → CdtrAgt → Cdtr → CdtrAcct
     return `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
     <GrpHdr>
       <MsgId>${msgId}</MsgId>
@@ -192,11 +199,15 @@ function buildPacs008Xml(params: Pacs008Params): string {
       </PmtId>
       <IntrBkSttlmAmt Ccy="${params.sourceCurrency}">${params.sourceAmount.toFixed(2)}</IntrBkSttlmAmt>
       <IntrBkSttlmDt>${now.split('T')[0]}</IntrBkSttlmDt>
-      <AccptncDtTm>${now}</AccptncDtTm>
-      <ChrgBr>SHAR</ChrgBr>
       <InstdAmt Ccy="${params.destinationCurrency}">${params.destinationAmount.toFixed(2)}</InstdAmt>
       <XchgRate>${params.exchangeRate}</XchgRate>
-      <CtrctId>${params.quoteId}</CtrctId>
+      <AgrdRate>
+        <UnitCcy>${params.sourceCurrency}</UnitCcy>
+        <QtdCcy>${params.destinationCurrency}</QtdCcy>
+        <PreAgrdXchgRate>${params.exchangeRate}</PreAgrdXchgRate>
+        <QtId>${params.quoteId}</QtId>
+      </AgrdRate>
+      <ChrgBr>SHAR</ChrgBr>
       <Dbtr>
         <Nm>${params.debtorName}</Nm>
       </Dbtr>
@@ -212,6 +223,11 @@ function buildPacs008Xml(params: Pacs008Params): string {
           <BICFI>${params.debtorAgentBic}</BICFI>
         </FinInstnId>
       </DbtrAgt>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>${params.creditorAgentBic}</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
       <Cdtr>
         <Nm>${params.creditorName}</Nm>
       </Cdtr>
@@ -222,11 +238,6 @@ function buildPacs008Xml(params: Pacs008Params): string {
           </Othr>
         </Id>
       </CdtrAcct>
-      <CdtrAgt>
-        <FinInstnId>
-          <BICFI>${params.creditorAgentBic}</BICFI>
-        </FinInstnId>
-      </CdtrAgt>
     </CdtTrfTxInf>
   </FIToFICstmrCdtTrf>
 </Document>`;
@@ -510,7 +521,7 @@ export async function getPSPs(countryCode?: string) {
         const filtered = countryCode ? mock.mockPSPs.filter(p => p.country_code === countryCode) : mock.mockPSPs;
         return { psps: filtered, total: filtered.length };
     }
-    const url = countryCode ? `/v1/psps?country_code=${countryCode}` : "/v1/psps";
+    const url = countryCode ? `/v1/psps?countryCode=${countryCode}` : "/v1/psps";
     return fetchJSON<{ psps: PSP[]; total: number }>(url);
 }
 
@@ -533,7 +544,7 @@ export async function getIPSOperators(countryCode?: string) {
         const filtered = countryCode ? mock.mockIPSOperators.filter(p => p.country_code === countryCode) : mock.mockIPSOperators;
         return { operators: filtered, total: filtered.length };
     }
-    const url = countryCode ? `/v1/ips?country_code=${countryCode}` : "/v1/ips";
+    const url = countryCode ? `/v1/ips?countryCode=${countryCode}` : "/v1/ips";
     return fetchJSON<{ operators: IPSOperator[]; total: number }>(url);
 }
 
@@ -564,7 +575,7 @@ export async function getPDOs(countryCode?: string) {
         const filtered = countryCode ? mock.mockPDOs.filter(p => p.country_code === countryCode) : mock.mockPDOs;
         return { pdos: filtered, total: filtered.length };
     }
-    const url = countryCode ? `/v1/pdos?country_code=${countryCode}` : "/v1/pdos";
+    const url = countryCode ? `/v1/pdos?countryCode=${countryCode}` : "/v1/pdos";
     return fetchJSON<{ pdos: PDO[]; total: number }>(url);
 }
 
@@ -647,5 +658,14 @@ export async function getActors(): Promise<{ actors: Actor[]; total: number }> {
         return { actors: mock.mockActors, total: mock.mockActors.length };
     }
     return fetchJSON<{ actors: Actor[]; total: number }>("/v1/actors");
+}
+
+// ISO 20022 Templates API
+export async function getIsoTemplates() {
+    if (MOCK_ENABLED) {
+        // Return static templates from mock data if needed, or empty object if not mocked yet
+        return {};
+    }
+    return fetchJSON<Record<string, any>>("/v1/iso20022/templates");
 }
 
