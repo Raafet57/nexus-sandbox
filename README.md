@@ -68,9 +68,136 @@ docker compose -f docker-compose.lite.yml up -d
 | Service | URL | Description |
 |---------|-----|-------------|
 | **Demo Dashboard** | http://localhost:8080 | Interactive UI with payment demos |
-| **API Documentation** | http://localhost:8000/docs | FastAPI auto-generated docs |
-| **Swagger UI** | http://localhost:8081 | Alternative API explorer |
-| **Jaeger Tracing** | http://localhost:16686 | Distributed tracing UI |
+| **API Docs (ReDoc)** | http://localhost:8080/api/redoc | Beautiful API documentation |
+| **API Docs (Swagger)** | http://localhost:8080/api/docs | Interactive API explorer |
+| **Jaeger Tracing** | http://localhost:16686 | Distributed tracing UI (full stack only) |
+
+![ReDoc API Documentation](./docs/screenshots/redoc.png)
+
+---
+
+## 🔌 API Routes Overview
+
+The sandbox exposes **60+ endpoints**. Here's the complete reference:
+
+<details>
+<summary><strong>📋 Click to expand full API routes table</strong></summary>
+
+### Core Payment Flow
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/iso20022/pacs008` | Submit pacs.008 payment instruction |
+| `POST` | `/v1/iso20022/pacs002` | Receive pacs.002 status report |
+| `GET` | `/v1/payments` | List all payments |
+| `GET` | `/v1/payments/{uetr}/events` | Get payment lifecycle events |
+| `GET` | `/v1/payments/{uetr}/messages` | Get ISO 20022 XML messages |
+| `GET` | `/v1/payments/{uetr}/status` | Get current payment status |
+
+### Quotes & FX Rates
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/quotes` | Retrieve FX quotes for corridor |
+| `GET` | `/v1/quotes/{quote_id}` | Get quote details |
+| `POST` | `/v1/rates` | Submit FX rate (FXP) |
+| `GET` | `/v1/rates` | List FXP rates |
+| `DELETE` | `/v1/rates/{rate_id}` | Withdraw FX rate |
+
+### Addressing & Proxy Resolution
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/addressing/resolve` | Resolve proxy → account (acmt.023/024) |
+| `POST` | `/v1/iso20022/acmt023` | Submit acmt.023 resolution request |
+| `POST` | `/v1/iso20022/acmt024` | Submit acmt.024 resolution report |
+| `GET` | `/v1/address-types/{id}/inputs` | Get input fields for address type |
+
+### Actor Registry (Plug-In Your Own)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/actors/register` | **Register your actor** |
+| `GET` | `/v1/actors` | List all registered actors |
+| `GET` | `/v1/actors/{bic}` | Get actor by BIC |
+| `PATCH` | `/v1/actors/{bic}/callback` | Update callback URL |
+| `DELETE` | `/v1/actors/{bic}` | Deregister actor |
+
+### PSP/IPS/PDO Dashboards
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/psps` | List PSPs |
+| `GET` | `/v1/psps/{bic}/payment-summary` | PSP payment statistics |
+| `GET` | `/v1/ips` | List IPS operators |
+| `GET` | `/v1/ips/{id}/members` | IPS member institutions |
+| `GET` | `/v1/pdos` | List PDOs |
+| `GET` | `/v1/pdos/country/{code}/registrations` | PDO proxy registrations |
+
+### Liquidity & Settlement (SAP)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/iso20022/camt103` | Submit camt.103 liquidity reservation |
+| `GET` | `/v1/liquidity/balances` | FXP balances at SAPs |
+| `POST` | `/v1/liquidity/reserve` | Reserve liquidity |
+| `GET` | `/v1/liquidity/settlement-calc` | Calculate settlement amounts |
+
+### Returns & Recalls
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/iso20022/pacs004` | Payment return (pacs.004) |
+| `POST` | `/v1/iso20022/camt056` | Cancellation request (recall) |
+| `POST` | `/v1/iso20022/camt029` | Resolution of investigation |
+| `GET` | `/v1/iso20022/recalls` | List recall requests |
+
+### Reference Data
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/countries` | List supported countries |
+| `GET` | `/v1/currencies` | List supported currencies |
+| `GET` | `/v1/fin-insts/{role}` | Financial institutions by role |
+| `GET` | `/v1/fees-and-amounts` | Calculate fees breakdown |
+| `GET` | `/v1/pre-transaction-disclosure` | Full PTD (critical for compliance) |
+
+### QR Codes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/v1/qr/parse` | Parse EMVCo QR |
+| `POST` | `/v1/qr/generate` | Generate EMVCo QR |
+| `POST` | `/v1/qr/upi/parse` | Parse UPI QR |
+
+</details>
+
+> 📖 **Interactive Docs**: [ReDoc](http://localhost:8080/api/redoc) | [Swagger](http://localhost:8080/api/docs)
+
+---
+
+## 🧩 Plug In Your Own Actors
+
+Want to test your PSP, FXP, or IPS implementation? The sandbox supports self-registration:
+
+### Register Your Actor
+```bash
+curl -X POST http://localhost:8000/v1/actors/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bic": "YOURPSPXXX",
+    "actorType": "PSP",
+    "name": "Your Organization",
+    "countryCode": "SG",
+    "callbackUrl": "https://your-server.com/nexus/callback"
+  }'
+```
+
+### Test Your Integration
+1. **Submit a payment** → `POST /pacs008` with your BIC
+2. **Receive callbacks** → Sandbox sends `pacs.002` to your `callbackUrl`
+3. **Inspect messages** → View XML in the [ISO Explorer](http://localhost:8080/explorer)
+
+### Pre-Seeded Actors
+| BIC | Name | Type | Country |
+|-----|------|------|---------|
+| `DBSGSGSG` | DBS Bank Singapore | PSP | SG |
+| `BKKBTHBK` | Bangkok Bank | PSP | TH |
+| `MAYBMYKL` | Maybank Malaysia | PSP | MY |
+| `NEXUSFXP1` | Nexus FXP Alpha | FXP | SG |
+
+> 📖 **Detailed Guide**: See [Integration Guide](./docs/INTEGRATION_GUIDE.md) for full actor registration, callback testing, and unhappy flow triggers.
 
 ---
 

@@ -21,6 +21,7 @@ const SCREENS = [
     { path: '/mesh', name: 'mesh', description: 'Network Mesh' },
     { path: '/actors', name: 'actors', description: 'Actors' },
     { path: '/settings', name: 'settings', description: 'Settings' },
+    { path: '/api/redoc', name: 'redoc', description: 'API Documentation (ReDoc)' },
 ];
 
 async function captureScreenshots() {
