@@ -72,16 +72,11 @@ docker compose -f docker-compose.lite.yml up -d
 | **API Docs (Swagger)** | http://localhost:8080/api/docs | Interactive API explorer |
 | **Jaeger Tracing** | http://localhost:16686 | Distributed tracing UI (full stack only) |
 
-![ReDoc API Documentation](./docs/screenshots/redoc.png)
-
 ---
 
 ## 🔌 API Routes Overview
 
 The sandbox exposes **60+ endpoints**. Here's the complete reference:
-
-<details>
-<summary><strong>📋 Click to expand full API routes table</strong></summary>
 
 ### Core Payment Flow
 | Method | Endpoint | Description |
@@ -160,8 +155,6 @@ The sandbox exposes **60+ endpoints**. Here's the complete reference:
 | `POST` | `/v1/qr/parse` | Parse EMVCo QR |
 | `POST` | `/v1/qr/generate` | Generate EMVCo QR |
 | `POST` | `/v1/qr/upi/parse` | Parse UPI QR |
-
-</details>
 
 > 📖 **Interactive Docs**: [ReDoc](http://localhost:8080/api/redoc) | [Swagger](http://localhost:8080/api/docs)
 
