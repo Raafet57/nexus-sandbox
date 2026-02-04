@@ -78,10 +78,14 @@ export async function getAddressTypes(countryCode: string) {
         return {
             countryCode,
             addressTypes: (pdo?.supported_proxy_types || []).map(type => ({
-                address_type_id: type,
-                name: type === "MBNO" ? "Mobile Number" : type,
-                description: `Resolve via ${type}`,
-                inputs: [{ field_id: "value", label: "Value", type: "text", required: true }]
+                addressTypeId: type,
+                addressTypeName: type === "MBNO" ? "Mobile Number" : type,
+                inputs: [{
+                    fieldName: "value",
+                    displayLabel: "Value",
+                    dataType: "text",
+                    attributes: { required: true }
+                }]
             }))
         };
     }
@@ -99,13 +103,14 @@ export async function resolveProxy(
 ): Promise<import("../types").ProxyResolutionResult> {
     if (MOCK_ENABLED) {
         return {
+            status: "VALIDATED",
             resolutionId: "mock-res-123",
             accountNumber: "1234567890",
             accountType: "BBAN",
             agentBic: country === "TH" ? "BKKBTHBK" : "MAYBMYKL",
             beneficiaryName: "Mock Beneficiary",
             displayName: "M. Beneficiary",
-            status: "VALIDATED",
+            verified: true,
             timestamp: new Date().toISOString()
         } as any;
     }
