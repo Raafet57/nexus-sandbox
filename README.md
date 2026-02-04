@@ -72,7 +72,27 @@ docker compose -f docker-compose.lite.yml up -d
 | **Live Demo** | [nexus-sandbox/pages](https://siva-sub.github.io/nexus-sandbox/) | Static preview (GitHub Pages) |
 | **API Docs (ReDoc)** | http://localhost:8080/api/redoc | Beautiful API documentation |
 | **API Docs (Swagger)** | http://localhost:8080/api/docs | Interactive API explorer |
-| **Jaeger Tracing** | http://localhost:16686 | Distributed tracing UI (full stack only) |
+---
+
+## 🌐 GitHub Pages Demo vs Docker
+
+The sandbox offers two ways to experience the Nexus payment flow:
+
+| Feature | GitHub Pages Demo | Docker (Full) |
+|---------|-------------------|---------------|
+| **Data Persistence** | Session memory only | PostgreSQL database |
+| **Payment Tracking** | Mock state store | Real event sourcing |
+| **ISO 20022 Messages** | Generated templates | XSD-validated XML |
+| **API Calls** | Simulated responses | Live FastAPI backend |
+| **Multi-user** | Single session | Concurrent sessions |
+| **Unhappy Flows** | Simulated rejection codes | Backend scenario triggers |
+
+> 💡 **Use GitHub Pages for**: Quick evaluation, UI exploration, understanding the flow  
+> 🔧 **Use Docker for**: Integration testing, API development, realistic sandbox
+
+The GitHub Pages demo provides a **fully functional UI demonstration** with mock data that accurately reflects the payment flow, fee structure, and lifecycle visualization. Payments submitted in the demo are stored in session memory and can be viewed in the Payment Explorer.
+
+For **production-grade testing** and API integration, use the Docker setup which provides real database persistence, XSD validation, and event-driven architecture.
 
 ---
 

@@ -44,14 +44,19 @@ export async function getCountries() {
     return fetchJSON<{ countries: import("../types").Country[] }>("/v1/countries");
 }
 
-// Quotes API
+// Quotes API - uses dynamic generation for mock mode
 export async function getQuotes(
     sourceCountry: string,
     destCountry: string,
     amount: number,
     amountType: "SOURCE" | "DESTINATION" = "SOURCE"
 ) {
-    if (MOCK_ENABLED) return { quotes: mock.mockQuotes };
+    if (MOCK_ENABLED) {
+        const quotes = mock.generateMockQuotes(sourceCountry, destCountry, amount, amountType);
+        // Cache quotes for later fee lookup
+        quotes.forEach(q => mock.cacheMockQuote(q));
+        return { quotes };
+    }
     const params = new URLSearchParams({
         sourceCountry,
         destCountry,
@@ -63,9 +68,15 @@ export async function getQuotes(
     );
 }
 
-// Fee disclosure API
+// Fee disclosure API - uses cached mock quote for dynamic fees
 export async function getPreTransactionDisclosure(quoteId: string) {
-    if (MOCK_ENABLED) return mock.mockQuotes[0].fees as any;
+    if (MOCK_ENABLED) {
+        const fees = mock.getMockFeeBreakdown(quoteId);
+        if (!fees) {
+            throw new Error(`Quote ${quoteId} not found or expired. Please search for new quotes.`);
+        }
+        return fees as any;
+    }
     return fetchJSON<import("../types").FeeBreakdown>(
         `/v1/pre-transaction-disclosure?quote_id=${quoteId}`
     );
@@ -225,9 +236,43 @@ function buildPacs008Xml(params: Pacs008Params): string {
 // Reference: NotebookLM confirms JSON is NOT supported for pacs.008
 export async function submitPacs008(params: Pacs008Params): Promise<Pacs008Response> {
     if (MOCK_ENABLED) {
+        // Store payment in mock store for Explorer lookup
+        const payment = mock.mockPaymentStore.createPayment({
+            uetr: params.uetr,
+            quoteId: params.quoteId,
+            exchangeRate: params.exchangeRate,
+            sourceAmount: params.sourceAmount,
+            sourceCurrency: params.sourceCurrency,
+            destinationAmount: params.destinationAmount,
+            destinationCurrency: params.destinationCurrency,
+            debtorName: params.debtorName,
+            debtorAccount: params.debtorAccount,
+            debtorAgentBic: params.debtorAgentBic,
+            creditorName: params.creditorName,
+            creditorAccount: params.creditorAccount,
+            creditorAgentBic: params.creditorAgentBic,
+            scenarioCode: params.scenarioCode,
+        });
+
+        // If scenario triggers rejection, throw error like real API
+        if (payment.status === "RJCT") {
+            const error = new Error(`Payment Rejected: ${payment.statusReasonCode}`) as Error & {
+                status?: number;
+                statusReasonCode?: string;
+                detail?: string;
+                uetr?: string;
+            };
+            error.status = 400;
+            error.statusReasonCode = payment.statusReasonCode;
+            const statusResult = mock.mockPaymentStore.getStatus(params.uetr);
+            error.detail = ('reasonDescription' in statusResult ? statusResult.reasonDescription : undefined) || "Payment rejected";
+            error.uetr = params.uetr;
+            throw error;
+        }
+
         return {
             uetr: params.uetr,
-            status: "ACCC",
+            status: payment.status,
             message: "Payment completed successfully (Mock)",
             callbackEndpoint: "https://mock-callback.example.com",
             processedAt: new Date().toISOString()
@@ -393,12 +438,40 @@ export async function emvcoToUPI(emvcoData: string) {
 
 // Payments Explorer
 export async function listPayments(status?: string) {
-    if (MOCK_ENABLED) return { payments: mock.mockPayments };
+    if (MOCK_ENABLED) {
+        // Combine stored mock payments with static samples
+        const storedPayments = mock.mockPaymentStore.list();
+        const allPayments = [...storedPayments, ...mock.mockPayments];
+        if (status) {
+            return { payments: allPayments.filter(p => p.status === status) };
+        }
+        return { payments: allPayments };
+    }
     const url = status ? `/v1/payments?status=${status}` : "/v1/payments";
     return fetchJSON<{ payments: import("../types").Payment[] }>(url);
 }
 
+// Payment Status API - with mock support for GitHub Pages
+export async function getPaymentStatus(uetr: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockPaymentStore.getStatus(uetr);
+    }
+    return fetchJSON<{ uetr: string; status: string; statusReasonCode?: string; reasonDescription?: string; sourcePsp: string; destinationPsp: string; amount: number; currency: string; initiatedAt: string; completedAt?: string }>(`/v1/payments/${uetr}/status`);
+}
+
+// Payment Messages API - with mock support for GitHub Pages
+export async function getPaymentMessages(uetr: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockPaymentStore.getMessages(uetr);
+    }
+    return fetchJSON<{ messages: { messageType: string; direction: string; xml: string; timestamp: string }[] }>(`/v1/payments/${uetr}/messages`);
+}
+
+// Payment Events API - with mock support for GitHub Pages
 export async function getPaymentEvents(uetr: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockPaymentStore.getEvents(uetr);
+    }
     return fetchJSON<{ uetr: string; events: import("../types").PaymentEvent[] }>(`/v1/payments/${uetr}/events`);
 }
 

@@ -33,6 +33,7 @@ import {
 } from "@tabler/icons-react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { checkHealth } from "../../services/api";
+import { MOCK_ENABLED } from "../../services/mockData";
 import { DemoBanner } from "../DemoBanner";
 
 interface NavItem {
@@ -161,11 +162,11 @@ export function AppLayout() {
                     </Group>
                     <Group>
                         <Badge
-                            color={apiStatus === "connected" ? "green" : apiStatus === "disconnected" ? "red" : "gray"}
+                            color={MOCK_ENABLED ? "blue" : apiStatus === "connected" ? "green" : apiStatus === "disconnected" ? "red" : "gray"}
                             variant="dot"
                             size="sm"
                         >
-                            API: {apiStatus}
+                            {MOCK_ENABLED ? "Demo Mode" : `API: ${apiStatus}`}
                         </Badge>
                         <ActionIcon
                             variant="subtle"

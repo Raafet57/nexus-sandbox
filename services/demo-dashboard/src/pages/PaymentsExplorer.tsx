@@ -48,9 +48,11 @@ import {
     IconReceiptDollar,
     IconBuilding,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MessageInspector } from "../components/MessageInspector";
 import { DevDebugPanel } from "../components/DevDebugPanel";
+import { getPaymentStatus, getPaymentMessages } from "../services/api";
 
 // 17-step lifecycle phases
 const LIFECYCLE_STEPS = [
@@ -109,45 +111,57 @@ interface Message {
 }
 
 export function PaymentsExplorer() {
+    const [searchParams] = useSearchParams();
     const [uetrInput, setUetrInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [payment, setPayment] = useState<PaymentDetails | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [error, setError] = useState<string | null>(null);
 
-    const searchPayment = async () => {
-        if (!uetrInput.trim()) {
-            setError("Please enter a UETR");
-            return;
+    // Handle URL query param for direct linking from demo
+    useEffect(() => {
+        const uetrFromUrl = searchParams.get("uetr");
+        if (uetrFromUrl && uetrFromUrl !== uetrInput) {
+            setUetrInput(uetrFromUrl);
+            // Auto-search when UETR is provided via URL
+            searchPaymentByUetr(uetrFromUrl);
         }
+    }, [searchParams]);
 
+    const searchPaymentByUetr = async (uetr: string) => {
         setLoading(true);
         setError(null);
         setPayment(null);
         setMessages([]);
 
         try {
-            // Fetch payment status
-            const statusResponse = await fetch(`/api/v1/payments/${uetrInput}/status`);
-            const statusData = await statusResponse.json();
+            // Fetch payment status using mock-enabled API
+            const statusData = await getPaymentStatus(uetr);
 
             if (statusData.status === "NOT_FOUND") {
-                setError(`Payment not found: ${uetrInput}`);
+                setError(`Payment not found: ${uetr}`);
                 setLoading(false);
                 return;
             }
 
-            setPayment(statusData);
+            setPayment(statusData as PaymentDetails);
 
-            // Fetch messages
-            const msgResponse = await fetch(`/api/v1/payments/${uetrInput}/messages`);
-            const msgData = await msgResponse.json();
-            setMessages(msgData.messages || []);
+            // Fetch messages using mock-enabled API
+            const msgData = await getPaymentMessages(uetr);
+            setMessages((msgData.messages || []) as Message[]);
         } catch (err) {
             setError(`Failed to fetch payment: ${err}`);
         } finally {
             setLoading(false);
         }
+    };
+
+    const searchPayment = async () => {
+        if (!uetrInput.trim()) {
+            setError("Please enter a UETR");
+            return;
+        }
+        await searchPaymentByUetr(uetrInput);
     };
 
     const getStatusInfo = (code: string) =>
