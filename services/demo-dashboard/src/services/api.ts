@@ -559,3 +559,20 @@ export async function purgeDemoData(
         method: "DELETE",
     });
 }
+
+// Actors API (for Mesh page)
+export interface Actor {
+    bic: string;
+    name: string;
+    actorType: "PSP" | "IPS" | "FXP" | "SAP" | "PDO";
+    countryCode?: string;
+    status: string;
+}
+
+export async function getActors(): Promise<{ actors: Actor[]; total: number }> {
+    if (MOCK_ENABLED) {
+        return { actors: mock.mockActors, total: mock.mockActors.length };
+    }
+    return fetchJSON<{ actors: Actor[]; total: number }>("/v1/actors");
+}
+

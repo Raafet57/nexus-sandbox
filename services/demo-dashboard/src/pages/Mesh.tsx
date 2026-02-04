@@ -24,15 +24,8 @@ import {
     IconAlertCircle,
 } from "@tabler/icons-react";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+import { getActors, type Actor } from "../services/api";
 import { DevDebugPanel } from "../components/DevDebugPanel";
-
-interface Actor {
-    bic: string;
-    name: string;
-    actorType: "FXP" | "IPS" | "PSP" | "SAP" | "PDO";
-    status: string;
-}
 
 
 export function MeshPage() {
@@ -43,9 +36,7 @@ export function MeshPage() {
     const fetchActors = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/v1/actors`);
-            if (!response.ok) throw new Error("Failed to fetch mesh participants");
-            const data = await response.json();
+            const data = await getActors();
             setActors(data.actors || []);
             setError(null);
         } catch (err) {

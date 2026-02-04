@@ -31,6 +31,33 @@ export const mockCountries = [
             { currencyCode: "MYR", maxAmount: "200000" }
         ],
         requiredMessageElements: { pacs008: [] }
+    },
+    {
+        countryId: 4,
+        countryCode: "ID",
+        name: "Indonesia",
+        currencies: [
+            { currencyCode: "IDR", maxAmount: "200000000" }
+        ],
+        requiredMessageElements: { pacs008: [] }
+    },
+    {
+        countryId: 5,
+        countryCode: "PH",
+        name: "Philippines",
+        currencies: [
+            { currencyCode: "PHP", maxAmount: "5000000" }
+        ],
+        requiredMessageElements: { pacs008: [] }
+    },
+    {
+        countryId: 6,
+        countryCode: "IN",
+        name: "India",
+        currencies: [
+            { currencyCode: "INR", maxAmount: "10000000" }
+        ],
+        requiredMessageElements: { pacs008: [] }
     }
 ];
 
@@ -92,7 +119,7 @@ export const mockLiquidityBalances = [
     { fxpId: "NEXUSFXP1", fxpName: "Nexus FXP Alpha", currency: "MYR", totalBalance: 15000000, reservedAmount: 450000, availableBalance: 14550000, status: "ACTIVE" }
 ];
 
-// Sample Quotes
+// Sample Quotes - includes SGD→THB, SGD→MYR, SGD→IDR for demo corridors
 export const mockQuotes = [
     {
         quoteId: "quote-demo-1",
@@ -104,6 +131,7 @@ export const mockQuotes = [
         spreadBps: 50,
         sourceInterbankAmount: "1000.00",
         destinationInterbankAmount: "25850.00",
+        creditorAccountAmount: "25850.00",
         cappedToMaxAmount: false,
         expiresAt: new Date(Date.now() + 600000).toISOString(),
         fees: {
@@ -125,7 +153,89 @@ export const mockQuotes = [
             totalCostPercent: "0.4",
             quoteValidUntil: new Date(Date.now() + 600000).toISOString()
         }
+    },
+    {
+        quoteId: "quote-demo-2",
+        fxpId: "NEXUSFXP1",
+        fxpName: "Nexus FXP Alpha",
+        sourceCurrency: "SGD",
+        destinationCurrency: "IDR",
+        exchangeRate: "11423.50",
+        spreadBps: 45,
+        sourceInterbankAmount: "8.75",
+        destinationInterbankAmount: "100000.00",
+        creditorAccountAmount: "100000.00",
+        cappedToMaxAmount: false,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        fees: {
+            quoteId: "quote-demo-2",
+            marketRate: "11420.00",
+            customerRate: "11423.50",
+            appliedSpreadBps: "45",
+            recipientNetAmount: "100000.00",
+            payoutGrossAmount: "100010.00",
+            destinationPspFee: "10.00",
+            destinationCurrency: "IDR",
+            senderPrincipal: "8.75",
+            sourcePspFee: "0.05",
+            sourcePspFeeType: "DEDUCTED",
+            schemeFee: "0.01",
+            senderTotal: "8.81",
+            sourceCurrency: "SGD",
+            effectiveRate: "11350.74",
+            totalCostPercent: "0.45",
+            quoteValidUntil: new Date(Date.now() + 600000).toISOString()
+        }
+    },
+    {
+        quoteId: "quote-demo-3",
+        fxpId: "NEXUSFXP1",
+        fxpName: "Nexus FXP Alpha",
+        sourceCurrency: "SGD",
+        destinationCurrency: "MYR",
+        exchangeRate: "3.45",
+        spreadBps: 40,
+        sourceInterbankAmount: "1000.00",
+        destinationInterbankAmount: "3450.00",
+        creditorAccountAmount: "3450.00",
+        cappedToMaxAmount: false,
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        fees: {
+            quoteId: "quote-demo-3",
+            marketRate: "3.44",
+            customerRate: "3.45",
+            appliedSpreadBps: "40",
+            recipientNetAmount: "3450.00",
+            payoutGrossAmount: "3451.00",
+            destinationPspFee: "1.00",
+            destinationCurrency: "MYR",
+            senderPrincipal: "1000.00",
+            sourcePspFee: "0.50",
+            sourcePspFeeType: "DEDUCTED",
+            schemeFee: "0.10",
+            senderTotal: "1000.60",
+            sourceCurrency: "SGD",
+            effectiveRate: "3.44",
+            totalCostPercent: "0.35",
+            quoteValidUntil: new Date(Date.now() + 600000).toISOString()
+        }
     }
+];
+
+// Mock Actors for Mesh page
+export const mockActors = [
+    { bic: "DBSGSGSG", name: "DBS Bank Singapore", actorType: "PSP" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "UOVBSGSG", name: "UOB Singapore", actorType: "PSP" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "BKKBTHBK", name: "Bangkok Bank", actorType: "PSP" as const, countryCode: "TH", status: "ACTIVE" },
+    { bic: "MAYBMYKL", name: "Maybank Malaysia", actorType: "PSP" as const, countryCode: "MY", status: "ACTIVE" },
+    { bic: "SGIPSOPS", name: "Singapore FAST", actorType: "IPS" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "THIPSOPS", name: "Thailand PromptPay", actorType: "IPS" as const, countryCode: "TH", status: "ACTIVE" },
+    { bic: "MYIPSOPS", name: "Malaysia DuitNow", actorType: "IPS" as const, countryCode: "MY", status: "ACTIVE" },
+    { bic: "NEXUSFXP1", name: "Nexus FXP Alpha", actorType: "FXP" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "NEXUSSAP1", name: "Nexus SAP Singapore", actorType: "SAP" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "NEXUSSAP2", name: "Nexus SAP Thailand", actorType: "SAP" as const, countryCode: "TH", status: "ACTIVE" },
+    { bic: "PDOSGOPS", name: "PayNow Directory", actorType: "PDO" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "PDOTHOPS", name: "PromptPay Directory", actorType: "PDO" as const, countryCode: "TH", status: "ACTIVE" },
 ];
 
 // Demo mode indicator
