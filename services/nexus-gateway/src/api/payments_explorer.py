@@ -1,0 +1,163 @@
+"""
+Payments Explorer API - Transaction History and Event Audit
+"""
+
+from fastapi import APIRouter, HTTPException, Depends, Query
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Optional
+import json
+
+from ..db import get_db
+
+router = APIRouter(prefix="/v1", tags=["Payments"])
+
+@router.get("/payments")
+async def list_payments(
+    status: Optional[str] = None,
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """List recent payments."""
+    query_str = "SELECT * FROM payments"
+    params = {}
+    
+    if status:
+        query_str += " WHERE status = :status"
+        params["status"] = status
+        
+    query_str += " ORDER BY initiated_at DESC LIMIT :limit"
+    params["limit"] = limit
+    
+    result = await db.execute(text(query_str), params)
+    return {"payments": [dict(row._mapping) for row in result.fetchall()]}
+
+@router.get("/payments/{uetr}/events")
+async def get_payment_events(
+    uetr: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get all events and ISO messages for a transaction."""
+    query = text("""
+        SELECT * FROM payment_events 
+        WHERE uetr = :uetr 
+        ORDER BY occurred_at ASC
+    """)
+    
+    result = await db.execute(query, {"uetr": uetr})
+    events = []
+    for row in result.fetchall():
+        event = dict(row._mapping)
+        if isinstance(event.get("data"), str):
+            event["data"] = json.loads(event["data"])
+        events.append(event)
+        
+    return {"uetr": uetr, "events": events}
+
+
+@router.get("/payments/{uetr}/messages")
+async def get_payment_messages(
+    uetr: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get raw ISO 20022 XML messages for a transaction.
+    
+    Returns all available message types including Release 1, Optional SAP, and Future messages.
+    Reference: ADR-011 - Developer Observability, ADR-013 - E2E Demo Integration
+    """
+    query = text("""
+        SELECT event_type, occurred_at,
+               pacs008_message, pacs002_message, acmt023_message, acmt024_message,
+               camt054_message, camt103_message, pain001_message,
+               pacs004_message, pacs028_message, camt056_message, camt029_message
+        FROM payment_events 
+        WHERE uetr = :uetr 
+        ORDER BY occurred_at ASC
+    """)
+    
+    result = await db.execute(query, {"uetr": uetr})
+    messages = []
+    
+    # Message type definitions
+    message_types = {
+        "pacs008_message": ("pacs.008", "outbound", "FI to FI Customer Credit Transfer (Payment Instruction)"),
+        "pacs002_message": ("pacs.002", "inbound", "Payment Status Report (Acceptance/Rejection)"),
+        "acmt023_message": ("acmt.023", "outbound", "Identification Verification Request (Proxy Resolution)"),
+        "acmt024_message": ("acmt.024", "inbound", "Identification Verification Report"),
+        "camt054_message": ("camt.054", "inbound", "Bank to Customer Debit Credit Notification (Reconciliation)"),
+        "camt103_message": ("camt.103", "outbound", "Create Reservation (SAP Integration Method 2a)"),
+        "pain001_message": ("pain.001", "outbound", "Customer Credit Transfer Initiation (SAP Integration Method 3)"),
+        "pacs004_message": ("pacs.004", "outbound", "Payment Return (Future - Release 2)"),
+        "pacs028_message": ("pacs.028", "outbound", "FI to FI Payment Status Request (Future - Release 2)"),
+        "camt056_message": ("camt.056", "outbound", "FI to FI Payment Cancellation Request (Recall - Future)"),
+        "camt029_message": ("camt.029", "inbound", "Resolution of Investigation (Recall Response - Future)"),
+    }
+    
+    for row in result.fetchall():
+        msg = dict(row._mapping)
+        
+        # Check each message type
+        for column, (msg_type, direction, description) in message_types.items():
+            if msg.get(column):
+                messages.append({
+                    "messageType": msg_type,
+                    "direction": direction,
+                    "description": description,
+                    "xml": msg[column],
+                    "timestamp": str(msg["occurred_at"]) if msg.get("occurred_at") else None
+                })
+    
+    return {
+        "uetr": uetr,
+        "messageCount": len(messages),
+        "messages": messages
+    }
+
+
+@router.get("/payments/{uetr}/status")
+async def get_payment_status(
+    uetr: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get current payment status with reason codes.
+    
+    Returns the latest status from pacs.002 for quick status checks.
+    Reference: ADR-011 - Developer Observability
+    """
+    query = text("""
+        SELECT p.*, pe.event_type, pe.data as latest_event_data
+        FROM payments p
+        LEFT JOIN (
+            SELECT DISTINCT ON (uetr) *
+            FROM payment_events
+            ORDER BY uetr, occurred_at DESC
+        ) pe ON p.uetr = pe.uetr
+        WHERE p.uetr = :uetr
+    """)
+    
+    result = await db.execute(query, {"uetr": uetr})
+    row = result.fetchone()
+    
+    if not row:
+        return {"uetr": uetr, "status": "NOT_FOUND", "message": "Payment not found"}
+    
+    payment = dict(row._mapping)
+    event_data = payment.get("latest_event_data", {})
+    if isinstance(event_data, str):
+        event_data = json.loads(event_data)
+    
+    return {
+        "uetr": uetr,
+        "status": payment.get("status", "UNKNOWN"),
+        "reasonCode": event_data.get("reason_code"),
+        "reasonDescription": event_data.get("reason_description"),
+        "sourcePsp": payment.get("source_psp_bic"),
+        "destinationPsp": payment.get("destination_psp_bic"),
+        "amount": payment.get("amount"),
+        "currency": payment.get("currency"),
+        "initiatedAt": str(payment.get("initiated_at")) if payment.get("initiated_at") else None,
+        "completedAt": str(payment.get("completed_at")) if payment.get("completed_at") else None
+    }
+

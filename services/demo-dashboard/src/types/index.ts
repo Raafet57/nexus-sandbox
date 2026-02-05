@@ -1,0 +1,212 @@
+// API Types for Nexus Gateway
+
+export interface CurrencyInfo {
+    currencyCode: string;
+    maxAmount: string;
+}
+
+export interface RequiredMessageElements {
+    pacs008?: string[];
+}
+
+export interface Country {
+    countryId: number;
+    countryCode: string;
+    name: string;
+    currencies: CurrencyInfo[];
+    requiredMessageElements: RequiredMessageElements;
+}
+
+export interface AddressTypeInput {
+    label: {
+        code: string;
+        title: { [key: string]: string };
+    };
+    attributes: {
+        name: string;
+        type: string;
+        pattern?: string;
+        placeholder?: string;
+        required: boolean;
+        hidden: boolean;
+    };
+    iso20022Path?: string;
+}
+
+export interface AddressType {
+    addressTypeId: string;
+    addressTypeName: string;
+    countryCode: string;
+    inputs: AddressTypeInput[];
+}
+
+export interface Quote {
+    quoteId: string;
+    fxpId: string;
+    fxpName: string;
+    sourceCurrency: string;
+    destinationCurrency: string;
+    exchangeRate: string;
+    spreadBps: number;
+    sourceInterbankAmount: string;
+    destinationInterbankAmount: string;
+    creditorAccountAmount?: string;
+    destinationPspFee?: string;
+    cappedToMaxAmount: boolean;
+    expiresAt: string;
+}
+
+export interface FeeBreakdown {
+    quoteId: string;
+
+    // Rates (both in destination per source, e.g., IDR per SGD)
+    marketRate: string;
+    customerRate: string;
+    appliedSpreadBps: string;
+
+    // Destination side (recipient)
+    recipientNetAmount: string;    // What recipient ACTUALLY receives (NET)
+    payoutGrossAmount: string;     // Amount sent to dest PSP (before their fee)
+    destinationPspFee: string;     // Fee deducted by dest PSP
+    destinationCurrency: string;
+
+    // Source side (sender)
+    senderPrincipal: string;       // FX principal
+    sourcePspFee: string;          // Source PSP fee
+    sourcePspFeeType: "INVOICED" | "DEDUCTED";
+    schemeFee: string;             // Nexus scheme fee
+    senderTotal: string;           // Total amount debited from sender
+    sourceCurrency: string;
+
+    // Disclosure metrics
+    effectiveRate: string;         // recipient_net / sender_total
+    totalCostPercent: string;      // Cost vs mid-market benchmark
+
+    quoteValidUntil: string;
+}
+
+export interface ProxyResolutionResult {
+    status: string;
+    resolutionId?: string;
+    accountName?: string;
+    beneficiaryName?: string;
+    accountNumber?: string;
+    accountType?: string;
+    bankName?: string;
+    agentBic?: string;
+    displayName?: string;
+    verified: boolean;
+    error?: string;
+    errorMessage?: string;
+    timestamp?: string;
+}
+
+export interface PaymentStatus {
+    transactionId: string;
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "REJECTED";
+    reasonCode?: string;
+    reasonDescription?: string;
+    timestamp: string;
+}
+
+export interface LifecycleStep {
+    id: number;
+    phase: number;
+    name: string;
+    apiCall: string;
+    isoMessage?: string;
+    status: "pending" | "active" | "completed" | "error";
+    timestamp?: string;
+    details?: string;
+}
+
+export interface FXRate {
+    rateId: string;
+    sourceCurrency: string;
+    destinationCurrency: string;
+    rate: number;
+    spreadBps: number;
+    fxpName: string;
+    validUntil: string;
+    status: "ACTIVE" | "EXPIRED" | "WITHDRAWN";
+}
+
+export interface LiquidityBalance {
+    fxpId: string;
+    fxpName: string;
+    currency: string;
+    totalBalance: number;
+    reservedAmount: number;
+    availableBalance: number;
+    status: "ACTIVE" | "LOW" | "CRITICAL";
+}
+
+export interface Reservation {
+    reservationId: string;
+    quoteId: string;
+    amount: number;
+    currency: string;
+    expiresAt: string;
+    status: "ACTIVE" | "RELEASED" | "CONSUMED";
+}
+
+export interface IntermediaryAgentAccount {
+    agentRole: string;
+    bic: string;          // BIC of the SAP (e.g., FASTSGS0)
+    accountNumber: string; // FXP account at SAP
+    name: string;         // SAP name
+}
+
+export interface IntermediaryAgentsResponse {
+    quoteId: string;
+    intermediaryAgent1: IntermediaryAgentAccount;
+    intermediaryAgent2: IntermediaryAgentAccount;
+}
+
+export interface PaymentEvent {
+    eventId: string;
+    uetr: string;
+    eventType: string;
+    event_type?: string; // Backend sync
+    actor: string;
+    data: Record<string, unknown>;
+    timestamp: string;
+}
+
+export interface Payment {
+    uetr: string;
+    quoteId: string;
+    sourcePspBic: string;
+    destinationPspBic: string;
+    debtorName: string;
+    debtorAccount: string;
+    creditorName: string;
+    creditorAccount: string;
+    sourceCurrency: string;
+    destinationCurrency: string;
+    sourceAmount: number;
+    exchangeRate: string;
+    status: string;
+    createdAt: string;
+    initiated_at: string; // Backend sync
+}
+
+export interface AddressTypeInputDetails {
+    fieldName: string;
+    displayLabel: string;
+    dataType: string;
+    attributes: {
+        placeholder?: string;
+        pattern?: string;
+        required: boolean;
+    };
+}
+
+export interface AddressTypeWithInputs {
+    addressTypeId: string;
+    addressTypeName: string;
+    inputs: AddressTypeInputDetails[];
+    // For Select compatibility
+    value?: string;
+    label?: string;
+}

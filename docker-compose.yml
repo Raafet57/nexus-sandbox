@@ -1,0 +1,370 @@
+# ============================================================================
+# Nexus Sandbox - Cross-Border Instant Payments Demo
+# Author: Siva Subramanian | https://sivasub.com
+# Reference: https://docs.nexusglobalpayments.org/
+# ============================================================================
+
+services:
+  # ===========================================================================
+  # Demo & Documentation Services
+  # ===========================================================================
+
+  demo-dashboard:
+    build:
+      context: ./services/demo-dashboard
+      dockerfile: Dockerfile
+      target: production
+    container_name: nexus-demo
+    ports:
+      - "8080:80"
+    depends_on:
+      nexus-gateway:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: nexus-swagger
+    ports:
+      - "8081:8080"
+    environment:
+      SWAGGER_JSON_URL: http://nexus-gateway:8000/openapi.json
+      BASE_URL: /
+    depends_on:
+      nexus-gateway:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  # ===========================================================================
+  # Infrastructure Services
+  # ===========================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexus-postgres
+    environment:
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus_sandbox_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U nexus -d nexus" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: nexus-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks:
+      - backend
+    healthcheck:
+      test: [ "CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: nexus-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - backend
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: nexus-jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - backend
+
+  # ===========================================================================
+  # Nexus Core Gateway
+  # Reference: https://docs.nexusglobalpayments.org/apis/overview
+  # ===========================================================================
+
+  nexus-gateway:
+    build:
+      context: ./services/nexus-gateway
+      dockerfile: Dockerfile
+    container_name: nexus-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://nexus:nexus_sandbox_password@postgres:5432/nexus
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: nexus-gateway
+      JWT_SECRET: nexus-sandbox-jwt-secret-change-in-production
+      QUOTE_VALIDITY_SECONDS: 600
+      PAYMENT_TIMEOUT_SECONDS: 60
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # PSP Simulators (Payment Service Providers)
+  # Reference: https://docs.nexusglobalpayments.org/introduction/terminology
+  # ===========================================================================
+
+  psp-sg:
+    build:
+      context: ./services/psp-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-psp-sg
+    ports:
+      - "3001:3000"
+    environment:
+      PSP_BIC: DBSSSGSG
+      PSP_COUNTRY: SG
+      PSP_CURRENCY: SGD
+      PSP_NAME: "DBS Bank Singapore"
+      PSP_MAX_AMOUNT: "200000"
+      PSP_FEE_PERCENT: "0.5"
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+      IPS_URL: http://ips-sg:3000
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+  psp-th:
+    build:
+      context: ./services/psp-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-psp-th
+    ports:
+      - "3002:3000"
+    environment:
+      PSP_BIC: KASITHBK
+      PSP_COUNTRY: TH
+      PSP_CURRENCY: THB
+      PSP_NAME: "Kasikorn Bank Thailand"
+      PSP_MAX_AMOUNT: "5000000"
+      PSP_FEE_PERCENT: "0.3"
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+      IPS_URL: http://ips-th:3000
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+  psp-my:
+    build:
+      context: ./services/psp-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-psp-my
+    ports:
+      - "3003:3000"
+    environment:
+      PSP_BIC: MABORKKL
+      PSP_COUNTRY: MY
+      PSP_CURRENCY: MYR
+      PSP_NAME: "Maybank Malaysia"
+      PSP_MAX_AMOUNT: "10000000"
+      PSP_FEE_PERCENT: "0.4"
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+  # ===========================================================================
+  # IPS Simulators (Instant Payment Systems)
+  # ===========================================================================
+
+  ips-sg:
+    build:
+      context: ./services/ips-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-ips-sg
+    ports:
+      - "3101:3000"
+    environment:
+      IPS_NAME: "FAST"
+      IPS_COUNTRY: SG
+      IPS_CURRENCY: SGD
+      IPS_CLEARING_SYSTEM_ID: SGFASG22
+      IPS_MAX_AMOUNT: "200000"
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+  ips-th:
+    build:
+      context: ./services/ips-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-ips-th
+    ports:
+      - "3102:3000"
+    environment:
+      IPS_NAME: "PromptPay"
+      IPS_COUNTRY: TH
+      IPS_CURRENCY: THB
+      IPS_CLEARING_SYSTEM_ID: THBAHTBK
+      IPS_MAX_AMOUNT: "5000000"
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+  # ===========================================================================
+  # FXP Simulator (Foreign Exchange Provider)
+  # ===========================================================================
+
+  fxp-abc:
+    build:
+      context: ./services/fxp-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-fxp-abc
+    ports:
+      - "3201:3000"
+    environment:
+      FXP_ID: fxp-abc
+      FXP_NAME: "ABC Currency Exchange"
+      FXP_BASE_SPREAD_BPS: "50"
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+      TIER_IMPROVEMENTS: '[{"minAmount":1000,"improvementBps":5},{"minAmount":10000,"improvementBps":10}]'
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+  # ===========================================================================
+  # SAP Simulator (Settlement Access Provider)
+  # ===========================================================================
+
+  sap-dbs:
+    build:
+      context: ./services/sap-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-sap-dbs
+    ports:
+      - "3301:3000"
+    environment:
+      SAP_ID: sap-dbs
+      SAP_NAME: "DBS SAP Singapore"
+      SAP_BIC: DBSSSGSG
+      SAP_COUNTRY: SG
+      SAP_CURRENCY: SGD
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+  # ===========================================================================
+  # PDO Simulator (Proxy Directory Operator)
+  # ===========================================================================
+
+  pdo-sg:
+    build:
+      context: ./services/pdo-simulator
+      dockerfile: Dockerfile
+    container_name: nexus-pdo-sg
+    ports:
+      - "3401:3000"
+    environment:
+      PDO_ID: pdo-sg
+      PDO_NAME: "PayNow Directory Singapore"
+      PDO_COUNTRY: SG
+      PROXY_TYPES: '["MOBI","NRIC","UEN"]'
+      NEXUS_GATEWAY_URL: http://nexus-gateway:8000
+    depends_on:
+      - nexus-gateway
+    networks:
+      - backend
+
+# =============================================================================
+# Volumes
+# =============================================================================
+
+volumes:
+  postgres_data:
+  redis_data:
+
+    # =============================================================================
+    # Networks
+    # =============================================================================
+
+networks:
+  frontend:
+    driver: bridge
+    name: nexus-frontend
+  backend:
+    driver: bridge
+    name: nexus-backend
