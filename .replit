@@ -23,7 +23,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd backend && python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 & cd services/demo-dashboard && npm run dev"
+args = "cd services/demo-dashboard && npm run dev"
 waitForPort = 5000
 
 [[ports]]
