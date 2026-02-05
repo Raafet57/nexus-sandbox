@@ -1,40 +1,11 @@
 import * as mock from "./mockData";
+import { fetchWithRetry, formatApiError, type ApiError } from "./apiClient";
 const { MOCK_ENABLED } = mock;
 
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+export { formatApiError, type ApiError };
 
-// Helper for fetch with error handling
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_BASE}${url}`, {
-        ...options,
-        headers: {
-            "Content-Type": "application/json",
-            ...options?.headers,
-        },
-    });
-
-    if (!response.ok) {
-        // Try to parse error body for structured error info
-        let errorBody = null;
-        try {
-            errorBody = await response.json();
-        } catch {
-            // Ignore JSON parse errors
-        }
-        const error = new Error(`API Error: ${response.status} ${response.statusText}`) as Error & {
-            status?: number;
-            statusReasonCode?: string;
-            detail?: string;
-            errorBody?: unknown
-        };
-        error.status = response.status;
-        error.statusReasonCode = errorBody?.statusReasonCode || errorBody?.error;
-        error.detail = errorBody?.message || errorBody?.detail;
-        error.errorBody = errorBody;
-        throw error;
-    }
-
-    return response.json();
+    return fetchWithRetry<T>(url, options);
 }
 
 
