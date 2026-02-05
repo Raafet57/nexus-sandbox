@@ -510,7 +510,7 @@ export function PaymentPage() {
                                 <Select
                                     label="Source Country"
                                     placeholder="Select sending country"
-                                    data={countries.map((c) => ({ value: c.countryCode, label: c.name }))}
+                                    data={countries.filter(c => c.countryCode && c.name).map((c) => ({ value: c.countryCode, label: c.name }))}
                                     value={sourceCountry}
                                     onChange={(val) => setSourceCountry(val)}
                                     searchable
@@ -578,7 +578,7 @@ export function PaymentPage() {
                                 <Select
                                     label="Destination Country"
                                     placeholder="Select country"
-                                    data={countries.map((c) => ({ value: c.countryCode, label: c.name }))}
+                                    data={countries.filter(c => c.countryCode && c.name).map((c) => ({ value: c.countryCode, label: c.name }))}
                                     value={selectedCountry}
                                     onChange={setSelectedCountry}
                                     searchable
@@ -586,7 +586,7 @@ export function PaymentPage() {
                                 <Select
                                     label="Target Proxy Type"
                                     placeholder="Select method"
-                                    data={proxyTypes.map(t => ({ value: t.value || t.addressTypeId, label: t.label || t.addressTypeName }))}
+                                    data={proxyTypes.filter(t => (t.value || t.addressTypeId) && (t.label || t.addressTypeName)).map(t => ({ value: t.value || t.addressTypeId, label: t.label || t.addressTypeName }))}
                                     value={selectedProxyType}
                                     onChange={setSelectedProxyType}
                                     disabled={!selectedCountry}
