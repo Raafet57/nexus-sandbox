@@ -23,11 +23,13 @@ A complete educational sandbox implementation of the Nexus Global Payments schem
 - Database: Replit Postgres (auto-configured via DATABASE_URL)
 
 ## Recent Changes
-- 2026-02-05: Pulled repository and configured for Replit environment
+- 2026-02-05: Major UI overhaul with modern theme, gradients, and glassmorphism
+- 2026-02-05: Enhanced Payment form with gradient cards, section headers, and metric displays
+- 2026-02-05: Improved sidebar/header with gradient icons and glass effects
+- 2026-02-05: Added fade/slide animations and quote card hover states
 - 2026-02-05: Set up Replit Postgres database with auto-seeding
 - 2026-02-05: Added centralized API error handling with retry logic (`apiClient.ts`)
 - 2026-02-05: Created reusable Payment components (PaymentForm, QuoteSelector, LifecycleTracker)
-- 2026-02-05: Fixed null-safety issues in Select components
 - Updated vite.config.ts to use port 5000 and allow all hosts
 
 ## User Preferences
@@ -50,3 +52,11 @@ A complete educational sandbox implementation of the Nexus Global Payments schem
   - 30-second timeout
   - Structured error types (ApiError)
   - Error formatting utilities
+
+## UI Theme
+- Custom color palettes: nexusPurple, nexusCyan, nexusGreen, nexusOrange
+- Glassmorphism effects with backdrop blur
+- Gradient buttons and badges
+- Fade/slide animations for page transitions
+- Quote card hover states with visual feedback
+- Monospace font (JetBrains Mono) for code elements
