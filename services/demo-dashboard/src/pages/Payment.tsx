@@ -497,12 +497,12 @@ export function PaymentPage() {
                         color="violet"
                         styles={{ label: { fontWeight: 500 } }}
                     />
-                    <Anchor href="/mesh" size="sm" fw={500} c="nexusCyan">View Network Mesh</Anchor>
+                    <Anchor href="/mesh" size="sm" fw={500} c="sky">View Network Mesh</Anchor>
                     <Badge 
                         size="lg" 
-                        variant="gradient"
-                        gradient={{ from: "nexusGreen.5", to: "nexusCyan.5", deg: 135 }}
-                        style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}
+                        variant="light"
+                        color="emerald"
+                        style={{ textTransform: "uppercase", letterSpacing: "0.04em" }}
                     >
                         Sandbox Connected
                     </Badge>
@@ -515,7 +515,7 @@ export function PaymentPage() {
                         <Card withBorder radius="md" p="lg" className="gradient-card">
                             <Stack gap="md">
                                 <Box className="section-header">
-                                    <Box className="section-header-icon" style={{ background: "var(--gradient-cyan)" }}>
+                                    <Box className="section-header-icon" style={{ background: "#0ea5e9" }}>
                                         <IconCreditCard size={18} />
                                     </Box>
                                     <Title order={5} fw={600}>Sender Information</Title>
@@ -560,14 +560,14 @@ export function PaymentPage() {
                             <Stack gap="md">
                                 <Group justify="space-between">
                                     <Box className="section-header" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
-                                        <Box className="section-header-icon" style={{ background: "var(--gradient-green)" }}>
+                                        <Box className="section-header-icon" style={{ background: "#10b981" }}>
                                             <IconUser size={18} />
                                         </Box>
                                         <Title order={5} fw={600}>Recipient Information</Title>
                                     </Box>
                                     <Badge 
-                                        variant="gradient" 
-                                        gradient={{ from: "grape", to: "violet", deg: 135 }}
+                                        variant="light" 
+                                        color="grape"
                                         leftSection={<IconQrcode size={12} />}
                                     >
                                         EMVCo QR
@@ -675,8 +675,8 @@ export function PaymentPage() {
                                 <Button
                                     fullWidth
                                     size="md"
-                                    variant="gradient"
-                                    gradient={{ from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }}
+                                    variant="filled"
+                                    color="sky"
                                     leftSection={<IconSend size={18} />}
                                     loading={loading.submit}
                                     disabled={!selectedQuote || !resolution || !resolution.verified}
@@ -684,7 +684,6 @@ export function PaymentPage() {
                                     styles={{
                                         root: {
                                             fontWeight: 600,
-                                            letterSpacing: "0.02em",
                                         },
                                     }}
                                 >
@@ -1057,17 +1056,14 @@ function FeeCard({ fee, quote, now }: { fee: FeeBreakdown; quote: Quote | null; 
         <Card withBorder radius="md" p="xl" className="gradient-card fade-in">
             <Group justify="space-between" mb="lg">
                 <Box className="section-header" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
-                    <Box className="section-header-icon" style={{ background: "var(--gradient-primary)" }}>
+                    <Box className="section-header-icon" style={{ background: "#0ea5e9" }}>
                         <IconReceipt size={18} />
                     </Box>
                     <Title order={4} fw={600}>Pre-Transaction Disclosure</Title>
                 </Box>
                 <Badge
-                    color={isWithinG20 ? "nexusGreen" : "nexusOrange"}
-                    variant="gradient"
-                    gradient={isWithinG20 
-                        ? { from: "nexusGreen.5", to: "nexusCyan.5", deg: 135 } 
-                        : { from: "nexusOrange.5", to: "red", deg: 135 }}
+                    color={isWithinG20 ? "emerald" : "amber"}
+                    variant="light"
                     leftSection={<IconInfoCircle size={14} />}
                 >
                     {totalCostPct.toFixed(2)}% Cost vs Mid-Market
@@ -1095,7 +1091,7 @@ function FeeCard({ fee, quote, now }: { fee: FeeBreakdown; quote: Quote | null; 
                     <Grid.Col span={6}>
                         <Box className="metric-card">
                             <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: "0.05em" }}>You Send</Text>
-                            <Text className="metric-value" c="nexusCyan" mt={4}>
+                            <Text className="metric-value" c="sky" mt={4}>
                                 {fee.sourceCurrency} {safeNumber(fee.senderTotal).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </Text>
                         </Box>
@@ -1103,7 +1099,7 @@ function FeeCard({ fee, quote, now }: { fee: FeeBreakdown; quote: Quote | null; 
                     <Grid.Col span={6}>
                         <Box className="metric-card">
                             <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: "0.05em" }}>Recipient Gets</Text>
-                            <Text className="metric-value" c="nexusGreen" mt={4}>
+                            <Text className="metric-value" c="emerald" mt={4}>
                                 {fee.destinationCurrency} {safeNumber(fee.recipientNetAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </Text>
                         </Box>
@@ -1218,12 +1214,8 @@ function LifecycleAccordion({
                                 <Group gap="xs">
                                     <Badge 
                                         size="sm" 
-                                        variant="gradient"
-                                        gradient={isComplete 
-                                            ? { from: "nexusGreen.5", to: "nexusCyan.5", deg: 135 }
-                                            : hasActive 
-                                                ? { from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }
-                                                : { from: "gray.5", to: "gray.6", deg: 135 }}
+                                        variant="filled"
+                                        color={isComplete ? "emerald" : hasActive ? "sky" : "gray"}
                                         circle
                                     >
                                         {phase}
@@ -1232,7 +1224,7 @@ function LifecycleAccordion({
                                 </Group>
                                 <Badge 
                                     size="sm" 
-                                    color={isComplete ? "nexusGreen" : hasActive ? "nexusPurple" : "gray"}
+                                    color={isComplete ? "emerald" : hasActive ? "sky" : "gray"}
                                     variant="light"
                                 >
                                     {completedCount}/{steps.length}

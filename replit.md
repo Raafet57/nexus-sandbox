@@ -54,9 +54,9 @@ A complete educational sandbox implementation of the Nexus Global Payments schem
   - Error formatting utilities
 
 ## UI Theme
-- Custom color palettes: nexusPurple, nexusCyan, nexusGreen, nexusOrange
-- Glassmorphism effects with backdrop blur
-- Gradient buttons and badges
-- Fade/slide animations for page transitions
+- Professional color palette: sky (primary), emerald (success), amber (warning), slate (neutral)
+- Clean, minimal card styling with subtle borders
+- Solid accent colors instead of flashy gradients
+- Fade animations for page transitions
 - Quote card hover states with visual feedback
 - Monospace font (JetBrains Mono) for code elements

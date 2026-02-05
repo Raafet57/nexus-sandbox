@@ -183,8 +183,8 @@ export function AppLayout() {
                             <ThemeIcon 
                                 size="lg" 
                                 radius="md" 
-                                variant="gradient"
-                                gradient={{ from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }}
+                                variant="filled"
+                                color="sky"
                             >
                                 <IconWorld size={20} />
                             </ThemeIcon>
@@ -193,8 +193,8 @@ export function AppLayout() {
                             </Title>
                         </Group>
                         <Badge 
-                            variant="gradient" 
-                            gradient={{ from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }}
+                            variant="light" 
+                            color="sky"
                             size="sm"
                             tt="uppercase"
                         >
@@ -244,9 +244,8 @@ export function AppLayout() {
                                     leftSection={
                                         <ThemeIcon 
                                             size="sm" 
-                                            variant={isActive ? "gradient" : "subtle"}
-                                            gradient={isActive ? { from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 } : undefined}
-                                            color={isActive ? undefined : "gray"}
+                                            variant={isActive ? "filled" : "subtle"}
+                                            color={isActive ? "sky" : "gray"}
                                         >
                                             <item.icon size={16} />
                                         </ThemeIcon>
