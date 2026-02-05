@@ -103,18 +103,18 @@ export function QuoteSelector({
                                     }}
                                 >
                                     <Table.Td>
-                                        <Text fw={500}>{quote.fxpName || quote.fxpCode}</Text>
-                                        <Text size="xs" c="dimmed">{quote.fxpCode}</Text>
+                                        <Text fw={500}>{quote.fxpName || quote.fxpId}</Text>
+                                        <Text size="xs" c="dimmed">{quote.fxpId}</Text>
                                     </Table.Td>
                                     <Table.Td>
-                                        <Text ff="monospace">{quote.exchangeRate.toFixed(4)}</Text>
+                                        <Text ff="monospace">{parseFloat(quote.exchangeRate).toFixed(4)}</Text>
                                         <Text size="xs" c="dimmed">+{quote.spreadBps || 0}bps</Text>
                                     </Table.Td>
                                     <Table.Td>
-                                        <Text fw={500}>{formatCurrency(quote.sourceAmount, quote.sourceCurrency)}</Text>
+                                        <Text fw={500}>{formatCurrency(parseFloat(quote.sourceInterbankAmount), quote.sourceCurrency)}</Text>
                                     </Table.Td>
                                     <Table.Td>
-                                        <Text fw={500} c="green">{formatCurrency(quote.destinationAmount, quote.destinationCurrency)}</Text>
+                                        <Text fw={500} c="green">{formatCurrency(parseFloat(quote.destinationInterbankAmount), quote.destinationCurrency)}</Text>
                                     </Table.Td>
                                     <Table.Td>
                                         <Box w={80}>
@@ -152,20 +152,20 @@ export function QuoteSelector({
                             <Text size="sm" fw={500}>Pre-Transaction Disclosure</Text>
                             <Group justify="space-between">
                                 <Text size="sm" c="dimmed">Send Amount:</Text>
-                                <Text size="sm">{formatCurrency(feeBreakdown.sendAmount, feeBreakdown.sendCurrency)}</Text>
+                                <Text size="sm">{formatCurrency(parseFloat(feeBreakdown.senderTotal), feeBreakdown.sourceCurrency)}</Text>
                             </Group>
                             <Group justify="space-between">
                                 <Text size="sm" c="dimmed">FX Rate:</Text>
-                                <Text size="sm">{feeBreakdown.exchangeRate.toFixed(4)}</Text>
+                                <Text size="sm">{feeBreakdown.customerRate}</Text>
                             </Group>
                             <Group justify="space-between">
                                 <Text size="sm" c="dimmed">Total Fees:</Text>
-                                <Text size="sm" c="orange">{formatCurrency(feeBreakdown.totalFees, feeBreakdown.sendCurrency)}</Text>
+                                <Text size="sm" c="orange">{formatCurrency(parseFloat(feeBreakdown.sourcePspFee) + parseFloat(feeBreakdown.schemeFee), feeBreakdown.sourceCurrency)}</Text>
                             </Group>
                             <Group justify="space-between">
                                 <Text size="sm" fw={500}>Recipient Gets:</Text>
                                 <Text size="sm" fw={500} c="green">
-                                    {formatCurrency(feeBreakdown.receiveAmount, feeBreakdown.receiveCurrency)}
+                                    {formatCurrency(parseFloat(feeBreakdown.recipientNetAmount), feeBreakdown.destinationCurrency)}
                                 </Text>
                             </Group>
                         </Stack>

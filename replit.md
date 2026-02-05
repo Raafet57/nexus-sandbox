@@ -7,7 +7,8 @@ A complete educational sandbox implementation of the Nexus Global Payments schem
 
 ## Project Structure
 - `services/demo-dashboard/` - React/Vite frontend dashboard (Mantine UI)
-- `services/nexus-gateway/` - Python FastAPI backend gateway
+- `backend/` - Python FastAPI backend (Replit-native setup)
+- `services/nexus-gateway/` - Python FastAPI backend gateway (Docker version)
 - `services/fxp-simulator/` - FX Provider simulator
 - `services/ips-simulator/` - Instant Payment System simulator
 - `services/pdo-simulator/` - Payment Data Object simulator
@@ -17,10 +18,16 @@ A complete educational sandbox implementation of the Nexus Global Payments schem
 - `migrations/` - Database migrations
 
 ## Running the Project
-The dashboard runs on port 5000 via Vite dev server.
+- Frontend: Port 5000 via Vite dev server
+- Backend API: Port 8000 via Uvicorn
+- Database: Replit Postgres (auto-configured via DATABASE_URL)
 
 ## Recent Changes
 - 2026-02-05: Pulled repository and configured for Replit environment
+- 2026-02-05: Set up Replit Postgres database with auto-seeding
+- 2026-02-05: Added centralized API error handling with retry logic (`apiClient.ts`)
+- 2026-02-05: Created reusable Payment components (PaymentForm, QuoteSelector, LifecycleTracker)
+- 2026-02-05: Fixed null-safety issues in Select components
 - Updated vite.config.ts to use port 5000 and allow all hosts
 
 ## User Preferences
@@ -28,5 +35,18 @@ The dashboard runs on port 5000 via Vite dev server.
 
 ## Tech Stack
 - Frontend: React 19, Vite 7, TypeScript, Mantine UI
-- Backend: Python FastAPI (when running full stack via Docker)
+- Backend: Python FastAPI with SQLAlchemy (async)
+- Database: PostgreSQL (Replit-hosted, Neon-backed)
 - Testing: Playwright for E2E tests
+
+## New Components (Ready for Integration)
+- `src/components/Payment/PaymentForm.tsx` - Sender/recipient input form
+- `src/components/Payment/QuoteSelector.tsx` - FX quote selection with PTD display
+- `src/components/Payment/LifecycleTracker.tsx` - 17-step payment lifecycle visualization
+
+## API Client Features
+- `src/services/apiClient.ts` - Centralized error handling with:
+  - Automatic retry with exponential backoff (3 retries)
+  - 30-second timeout
+  - Structured error types (ApiError)
+  - Error formatting utilities

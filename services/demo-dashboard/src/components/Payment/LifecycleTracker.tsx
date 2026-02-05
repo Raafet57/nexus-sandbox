@@ -129,7 +129,7 @@ export function LifecycleTracker({ steps, devMode }: LifecycleTrackerProps) {
                                                     <Stack gap={4} mt="xs">
                                                         <Group gap="xs">
                                                             <Text size="xs" c="dimmed">API:</Text>
-                                                            <Code size="xs">{step.apiCall}</Code>
+                                                            <Code>{step.apiCall}</Code>
                                                         </Group>
                                                         {step.isoMessage !== "-" && (
                                                             <Group gap="xs">
@@ -140,7 +140,7 @@ export function LifecycleTracker({ steps, devMode }: LifecycleTrackerProps) {
                                                             </Group>
                                                         )}
                                                         {step.details && (
-                                                            <Code block size="xs" mt="xs">
+                                                            <Code block mt="xs">
                                                                 {JSON.stringify(step.details, null, 2)}
                                                             </Code>
                                                         )}
