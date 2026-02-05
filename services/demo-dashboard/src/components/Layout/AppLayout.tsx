@@ -11,6 +11,9 @@ import {
     ActionIcon,
     Box,
     Divider,
+    ThemeIcon,
+    Stack,
+    Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
@@ -21,8 +24,6 @@ import {
     IconSettings,
     IconMoon,
     IconSun,
-    IconCircleCheck,
-    IconCircleX,
     IconNetwork,
     IconUsers,
     IconBuilding,
@@ -30,6 +31,8 @@ import {
     IconApi,
     IconExternalLink,
     IconReportAnalytics,
+    IconPlayerPlay,
+    IconWorld,
 } from "@tabler/icons-react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { checkHealth } from "../../services/api";
@@ -51,7 +54,7 @@ const navItems: NavItem[] = [
         description: "PSP payment flow",
     },
     {
-        icon: IconCircleX,
+        icon: IconPlayerPlay,
         label: "Demo Scenarios",
         path: "/demo",
         description: "Unhappy flows testing",
@@ -139,6 +142,9 @@ export function AppLayout() {
         return () => clearInterval(interval);
     }, []);
 
+    const statusColor = apiStatus === "connected" ? "green" : apiStatus === "disconnected" ? "red" : "yellow";
+    const statusText = apiStatus === "connected" ? "Connected" : apiStatus === "disconnected" ? "Disconnected" : "Checking";
+
     return (
         <AppShell
             header={{ height: 60 }}
@@ -147,30 +153,73 @@ export function AppLayout() {
                 breakpoint: "sm",
                 collapsed: { mobile: !opened },
             }}
-            padding="md"
+            padding="lg"
+            styles={{
+                header: {
+                    borderBottom: "1px solid var(--glass-border)",
+                    backdropFilter: "blur(10px)",
+                    background: colorScheme === "dark" 
+                        ? "rgba(26, 27, 30, 0.85)" 
+                        : "rgba(255, 255, 255, 0.85)",
+                },
+                navbar: {
+                    borderRight: "1px solid var(--glass-border)",
+                    background: colorScheme === "dark"
+                        ? "rgba(26, 27, 30, 0.95)"
+                        : "rgba(255, 255, 255, 0.95)",
+                },
+                main: {
+                    background: colorScheme === "dark"
+                        ? "linear-gradient(180deg, #1a1b1e 0%, #141517 100%)"
+                        : "linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%)",
+                },
+            }}
         >
             <AppShell.Header>
                 <Group h="100%" px="md" justify="space-between">
-                    <Group>
+                    <Group gap="md">
                         <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-                        <Title order={3} c="nexusPurple">
-                            🌐 NEXUS SANDBOX
-                        </Title>
-                        <Badge variant="light" color="nexusPurple" size="sm">
+                        <Group gap="xs">
+                            <ThemeIcon 
+                                size="lg" 
+                                radius="md" 
+                                variant="gradient"
+                                gradient={{ from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }}
+                            >
+                                <IconWorld size={20} />
+                            </ThemeIcon>
+                            <Title order={3} fw={700} style={{ letterSpacing: "-0.02em" }}>
+                                NEXUS SANDBOX
+                            </Title>
+                        </Group>
+                        <Badge 
+                            variant="gradient" 
+                            gradient={{ from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }}
+                            size="sm"
+                            tt="uppercase"
+                        >
                             Demo
                         </Badge>
                     </Group>
-                    <Group>
-                        <Badge
-                            color={MOCK_ENABLED ? "blue" : apiStatus === "connected" ? "green" : apiStatus === "disconnected" ? "red" : "gray"}
-                            variant="dot"
-                            size="sm"
-                        >
-                            {MOCK_ENABLED ? "Demo Mode" : `API: ${apiStatus}`}
-                        </Badge>
+                    <Group gap="sm">
+                        <Tooltip label={`API: ${statusText}`}>
+                            <Badge
+                                color={MOCK_ENABLED ? "blue" : statusColor}
+                                variant="dot"
+                                size="lg"
+                                styles={{
+                                    root: {
+                                        cursor: "default",
+                                    },
+                                }}
+                            >
+                                {MOCK_ENABLED ? "Demo Mode" : `API: ${statusText.toUpperCase()}`}
+                            </Badge>
+                        </Tooltip>
                         <ActionIcon
                             variant="subtle"
                             size="lg"
+                            radius="md"
                             onClick={() => toggleColorScheme()}
                             title="Toggle color scheme"
                         >
@@ -180,46 +229,74 @@ export function AppLayout() {
                 </Group>
             </AppShell.Header>
 
-            <AppShell.Navbar p="md">
-                <AppShell.Section grow>
-                    {navItems.map((item) => (
-                        <NavLink
-                            key={item.path}
-                            component={Link}
-                            to={item.path}
-                            label={item.label}
-                            description={item.description}
-                            leftSection={<item.icon size={20} />}
-                            active={location.pathname === item.path}
-                            onClick={() => toggle()}
-                            mb="xs"
-                        />
-                    ))}
+            <AppShell.Navbar p="sm">
+                <AppShell.Section grow style={{ overflow: "auto" }}>
+                    <Stack gap={4}>
+                        {navItems.map((item) => {
+                            const isActive = location.pathname === item.path;
+                            return (
+                                <NavLink
+                                    key={item.path}
+                                    component={Link}
+                                    to={item.path}
+                                    label={item.label}
+                                    description={item.description}
+                                    leftSection={
+                                        <ThemeIcon 
+                                            size="sm" 
+                                            variant={isActive ? "gradient" : "subtle"}
+                                            gradient={isActive ? { from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 } : undefined}
+                                            color={isActive ? undefined : "gray"}
+                                        >
+                                            <item.icon size={16} />
+                                        </ThemeIcon>
+                                    }
+                                    active={isActive}
+                                    onClick={() => toggle()}
+                                    styles={{
+                                        root: {
+                                            borderRadius: "var(--mantine-radius-md)",
+                                            marginBottom: 2,
+                                        },
+                                        label: {
+                                            fontWeight: isActive ? 600 : 500,
+                                        },
+                                    }}
+                                />
+                            );
+                        })}
+                    </Stack>
                 </AppShell.Section>
 
                 <AppShell.Section>
-                    <Divider my="sm" />
+                    <Divider my="sm" color="var(--glass-border)" />
                     <NavLink
                         component="a"
                         href="/api/docs"
                         target="_blank"
                         label="API Docs"
                         description="Swagger/OpenAPI"
-                        leftSection={<IconApi size={20} />}
-                        rightSection={<IconExternalLink size={14} />}
-                        mb="xs"
+                        leftSection={
+                            <ThemeIcon size="sm" variant="subtle" color="gray">
+                                <IconApi size={16} />
+                            </ThemeIcon>
+                        }
+                        rightSection={<IconExternalLink size={14} opacity={0.5} />}
+                        styles={{
+                            root: {
+                                borderRadius: "var(--mantine-radius-md)",
+                            },
+                        }}
                     />
-                    <Box p="xs">
-                        <Text size="xs" c="dimmed" mb="xs">
+                    <Box p="sm" mt="xs">
+                        <Text size="xs" c="dimmed" fw={600} tt="uppercase" mb="xs" style={{ letterSpacing: "0.05em" }}>
                             System Status
                         </Text>
                         <Group gap="xs">
-                            {apiStatus === "connected" ? (
-                                <IconCircleCheck size={16} color="var(--mantine-color-green-6)" />
-                            ) : (
-                                <IconCircleX size={16} color="var(--mantine-color-red-6)" />
-                            )}
-                            <Text size="xs">Gateway: {apiStatus}</Text>
+                            <span className={`status-dot ${apiStatus}`} />
+                            <Text size="sm" fw={500}>
+                                Gateway: {statusText}
+                            </Text>
                         </Group>
                     </Box>
                 </AppShell.Section>
@@ -227,7 +304,9 @@ export function AppLayout() {
 
             <AppShell.Main>
                 <DemoBanner />
-                <Outlet />
+                <Box className="fade-in">
+                    <Outlet />
+                </Box>
             </AppShell.Main>
         </AppShell>
     );

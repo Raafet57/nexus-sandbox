@@ -474,13 +474,20 @@ export function PaymentPage() {
     const selectedCountryData = countries.find((c) => c.countryCode === selectedCountry);
 
     return (
-        <Stack gap="lg">
-            <Breadcrumbs mb="xs">
-                <Anchor href="/actors" size="xs">Actor Registry</Anchor>
+        <Stack gap="lg" className="fade-in">
+            <Breadcrumbs mb="xs" separator="/">
+                <Anchor href="/actors" size="xs" c="dimmed">Actor Registry</Anchor>
                 <Text size="xs" c="dimmed">Global Payment Dashboard</Text>
             </Breadcrumbs>
-            <Group justify="space-between">
-                <Title order={2}>Global Payment Dashboard</Title>
+            <Group justify="space-between" align="flex-start">
+                <Box>
+                    <Title order={2} fw={700} style={{ letterSpacing: "-0.02em" }}>
+                        Global Payment Dashboard
+                    </Title>
+                    <Text size="sm" c="dimmed" mt={4}>
+                        Cross-border instant payments powered by Nexus
+                    </Text>
+                </Box>
                 <Group>
                     <Switch
                         label="Developer Mode"
@@ -488,9 +495,15 @@ export function PaymentPage() {
                         checked={devMode}
                         onChange={(e) => setDevMode(e.currentTarget.checked)}
                         color="violet"
+                        styles={{ label: { fontWeight: 500 } }}
                     />
-                    <Anchor href="/mesh" size="sm">View Network Mesh</Anchor>
-                    <Badge size="lg" color="green" variant="light">
+                    <Anchor href="/mesh" size="sm" fw={500} c="nexusCyan">View Network Mesh</Anchor>
+                    <Badge 
+                        size="lg" 
+                        variant="gradient"
+                        gradient={{ from: "nexusGreen.5", to: "nexusCyan.5", deg: 135 }}
+                        style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}
+                    >
                         Sandbox Connected
                     </Badge>
                 </Group>
@@ -499,14 +512,14 @@ export function PaymentPage() {
             <Grid gutter="xl">
                 <Grid.Col span={{ base: 12, md: 4 }}>
                     <Stack gap="md">
-                        <Card withBorder radius="md" p="xl" bg="var(--mantine-color-dark-7)">
+                        <Card withBorder radius="md" p="lg" className="gradient-card">
                             <Stack gap="md">
-                                <Title order={5}>
-                                    <Group gap="xs">
-                                        <IconCreditCard size={20} color="var(--mantine-color-blue-filled)" />
-                                        Sender Information
-                                    </Group>
-                                </Title>
+                                <Box className="section-header">
+                                    <Box className="section-header-icon" style={{ background: "var(--gradient-cyan)" }}>
+                                        <IconCreditCard size={18} />
+                                    </Box>
+                                    <Title order={5} fw={600}>Sender Information</Title>
+                                </Box>
                                 <Select
                                     label="Source Country"
                                     placeholder="Select sending country"
@@ -543,16 +556,20 @@ export function PaymentPage() {
                             </Stack>
                         </Card>
 
-                        <Card withBorder radius="md" p="xl">
+                        <Card withBorder radius="md" p="lg" className="gradient-card">
                             <Stack gap="md">
                                 <Group justify="space-between">
-                                    <Title order={5}>
-                                        <Group gap="xs">
-                                            <IconUser size={20} color="var(--mantine-color-green-filled)" />
-                                            Recipient Information
-                                        </Group>
-                                    </Title>
-                                    <Badge color="grape" variant="light" leftSection={<IconQrcode size={12} />}>
+                                    <Box className="section-header" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
+                                        <Box className="section-header-icon" style={{ background: "var(--gradient-green)" }}>
+                                            <IconUser size={18} />
+                                        </Box>
+                                        <Title order={5} fw={600}>Recipient Information</Title>
+                                    </Box>
+                                    <Badge 
+                                        variant="gradient" 
+                                        gradient={{ from: "grape", to: "violet", deg: 135 }}
+                                        leftSection={<IconQrcode size={12} />}
+                                    >
                                         EMVCo QR
                                     </Badge>
                                 </Group>
@@ -657,12 +674,21 @@ export function PaymentPage() {
                                 )}
                                 <Button
                                     fullWidth
-                                    leftSection={<IconSend size={16} />}
+                                    size="md"
+                                    variant="gradient"
+                                    gradient={{ from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }}
+                                    leftSection={<IconSend size={18} />}
                                     loading={loading.submit}
                                     disabled={!selectedQuote || !resolution || !resolution.verified}
                                     onClick={handleSubmit}
+                                    styles={{
+                                        root: {
+                                            fontWeight: 600,
+                                            letterSpacing: "0.02em",
+                                        },
+                                    }}
                                 >
-                                    Confirm & Send
+                                    Confirm & Send Payment
                                 </Button>
                             </Stack>
                         </Card>
@@ -670,12 +696,30 @@ export function PaymentPage() {
                 </Grid.Col>
 
                 <Grid.Col span={{ base: 12, md: 8 }}>
-                    <Tabs defaultValue="quotes">
-                        <Tabs.List mb="md">
-                            <Tabs.Tab value="quotes" leftSection={<IconCoin size={16} />}>
+                    <Tabs defaultValue="quotes" variant="pills" radius="md">
+                        <Tabs.List mb="lg" style={{ gap: "0.5rem" }}>
+                            <Tabs.Tab 
+                                value="quotes" 
+                                leftSection={<IconCoin size={16} />}
+                                styles={{
+                                    tab: {
+                                        fontWeight: 500,
+                                        transition: "all 0.2s ease",
+                                    },
+                                }}
+                            >
                                 FX Quotes
                             </Tabs.Tab>
-                            <Tabs.Tab value="lifecycle" leftSection={<IconClipboardList size={16} />}>
+                            <Tabs.Tab 
+                                value="lifecycle" 
+                                leftSection={<IconClipboardList size={16} />}
+                                styles={{
+                                    tab: {
+                                        fontWeight: 500,
+                                        transition: "all 0.2s ease",
+                                    },
+                                }}
+                            >
                                 Lifecycle Trace
                             </Tabs.Tab>
                         </Tabs.List>
@@ -683,21 +727,24 @@ export function PaymentPage() {
                         <Tabs.Panel value="quotes">
                             <Stack gap="md">
                                 {quotes.length > 0 ? (
-                                    quotes.map((quote) => (
+                                    quotes.map((quote) => {
+                                        const isSelected = selectedQuote?.quoteId === quote.quoteId;
+                                        const expiresAt = new Date(quote.expiresAt).getTime();
+                                        const isExpired = now >= expiresAt;
+                                        return (
                                         <Card
                                             key={quote.quoteId}
                                             withBorder
                                             radius="md"
-                                            p="md"
-                                            onClick={() => handleQuoteSelect(quote)}
+                                            p="lg"
+                                            onClick={() => !isExpired && handleQuoteSelect(quote)}
+                                            className={`quote-card ${isSelected ? "selected" : ""} ${isExpired ? "expired" : ""}`}
                                             style={{
-                                                cursor: "pointer",
-                                                borderColor: selectedQuote?.quoteId === quote.quoteId
-                                                    ? "var(--mantine-color-blue-filled)"
+                                                cursor: isExpired ? "not-allowed" : "pointer",
+                                                borderColor: isSelected
+                                                    ? "var(--mantine-color-nexusGreen-5)"
                                                     : undefined,
-                                                backgroundColor: selectedQuote?.quoteId === quote.quoteId
-                                                    ? "var(--mantine-color-blue-light)"
-                                                    : undefined
+                                                borderWidth: isSelected ? 2 : 1,
                                             }}
                                         >
                                             <Group justify="space-between" align="flex-start">
@@ -758,7 +805,8 @@ export function PaymentPage() {
                                                 </Stack>
                                             </Group>
                                         </Card>
-                                    ))
+                                        );
+                                    })
                                 ) : (
                                     <Alert icon={<IconAlertCircle size={16} />} title="Quoting" color="blue">
                                         Select a destination country to retrieve live multi-provider quotes via Nexus FXP Aggregation.
@@ -1006,15 +1054,20 @@ function FeeCard({ fee, quote, now }: { fee: FeeBreakdown; quote: Quote | null; 
     const isWithinG20 = totalCostPct <= 3.0;
 
     return (
-        <Card withBorder radius="md" p="xl" bg="var(--mantine-color-dark-8)">
+        <Card withBorder radius="md" p="xl" className="gradient-card fade-in">
             <Group justify="space-between" mb="lg">
-                <Group gap="xs">
-                    <IconReceipt size={24} color="var(--mantine-color-blue-filled)" />
-                    <Title order={4}>Pre-Transaction Disclosure</Title>
-                </Group>
+                <Box className="section-header" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
+                    <Box className="section-header-icon" style={{ background: "var(--gradient-primary)" }}>
+                        <IconReceipt size={18} />
+                    </Box>
+                    <Title order={4} fw={600}>Pre-Transaction Disclosure</Title>
+                </Box>
                 <Badge
-                    color={isWithinG20 ? "green" : "orange"}
-                    variant="light"
+                    color={isWithinG20 ? "nexusGreen" : "nexusOrange"}
+                    variant="gradient"
+                    gradient={isWithinG20 
+                        ? { from: "nexusGreen.5", to: "nexusCyan.5", deg: 135 } 
+                        : { from: "nexusOrange.5", to: "red", deg: 135 }}
                     leftSection={<IconInfoCircle size={14} />}
                 >
                     {totalCostPct.toFixed(2)}% Cost vs Mid-Market
@@ -1038,21 +1091,24 @@ function FeeCard({ fee, quote, now }: { fee: FeeBreakdown; quote: Quote | null; 
             </Box>
 
             <Stack gap="xl">
-                {/* Sender Side (Amount to be Debited) */}
-                <Box>
-                    <Text size="sm" c="dimmed">Amount to be Debited (Total)</Text>
-                    <Text size="xl" fw={700} c="blue">
-                        {fee.sourceCurrency} {safeNumber(fee.senderTotal).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </Text>
-                </Box>
-
-                {/* Recipient Side (Amount Received) */}
-                <Box>
-                    <Text size="sm" c="dimmed">Amount Recipient Receives (Net)</Text>
-                    <Text size="xl" fw={700} c="green">
-                        {fee.destinationCurrency} {safeNumber(fee.recipientNetAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </Text>
-                </Box>
+                <Grid>
+                    <Grid.Col span={6}>
+                        <Box className="metric-card">
+                            <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: "0.05em" }}>You Send</Text>
+                            <Text className="metric-value" c="nexusCyan" mt={4}>
+                                {fee.sourceCurrency} {safeNumber(fee.senderTotal).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </Text>
+                        </Box>
+                    </Grid.Col>
+                    <Grid.Col span={6}>
+                        <Box className="metric-card">
+                            <Text size="xs" c="dimmed" tt="uppercase" fw={600} style={{ letterSpacing: "0.05em" }}>Recipient Gets</Text>
+                            <Text className="metric-value" c="nexusGreen" mt={4}>
+                                {fee.destinationCurrency} {safeNumber(fee.recipientNetAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </Text>
+                        </Box>
+                    </Grid.Col>
+                </Grid>
 
                 {/* Fee Breakdown Table - with reconciliation */}
                 <Table withColumnBorders={false} verticalSpacing="sm">
@@ -1150,16 +1206,35 @@ function LifecycleAccordion({
     intermediaries: IntermediaryAgentsResponse | null;
 }) {
     return (
-        <Accordion defaultValue={["1", "2"]} multiple>
+        <Accordion defaultValue={["1", "2"]} multiple variant="separated" radius="md">
             {stepsByPhase.map(({ phase, name, steps }) => {
                 const completedCount = steps.filter((s) => s.status === "completed").length;
                 const hasActive = steps.some((s) => s.status === "active");
+                const isComplete = completedCount === steps.length;
                 return (
-                    <Accordion.Item key={phase} value={String(phase)}>
+                    <Accordion.Item key={phase} value={String(phase)} className="gradient-card">
                         <Accordion.Control>
                             <Group justify="space-between">
-                                <Text size="sm" fw={500}>Phase {phase}: {name}</Text>
-                                <Badge size="sm" color={completedCount === steps.length ? "green" : hasActive ? "blue" : "gray"}>
+                                <Group gap="xs">
+                                    <Badge 
+                                        size="sm" 
+                                        variant="gradient"
+                                        gradient={isComplete 
+                                            ? { from: "nexusGreen.5", to: "nexusCyan.5", deg: 135 }
+                                            : hasActive 
+                                                ? { from: "nexusPurple.5", to: "nexusCyan.5", deg: 135 }
+                                                : { from: "gray.5", to: "gray.6", deg: 135 }}
+                                        circle
+                                    >
+                                        {phase}
+                                    </Badge>
+                                    <Text size="sm" fw={600}>{name}</Text>
+                                </Group>
+                                <Badge 
+                                    size="sm" 
+                                    color={isComplete ? "nexusGreen" : hasActive ? "nexusPurple" : "gray"}
+                                    variant="light"
+                                >
                                     {completedCount}/{steps.length}
                                 </Badge>
                             </Group>
