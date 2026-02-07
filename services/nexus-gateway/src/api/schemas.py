@@ -147,10 +147,11 @@ class QuoteInfo(BaseModel):
     source_interbank_amount: str = Field(alias="sourceInterbankAmount")
     destination_interbank_amount: str = Field(alias="destinationInterbankAmount")
     creditor_account_amount: Optional[str] = Field(alias="creditorAccountAmount", default=None)
+    source_psp_fee: Optional[str] = Field(alias="sourcePspFee", default=None)
     destination_psp_fee: Optional[str] = Field(alias="destinationPspFee", default=None)
     capped_to_max_amount: bool = Field(alias="cappedToMaxAmount")
     expires_at: str = Field(alias="expiresAt")
-    
+
     class Config:
         populate_by_name = True
 

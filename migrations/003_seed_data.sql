@@ -352,7 +352,7 @@ VALUES (
 -- =============================================================================
 
 -- Sample Payment 1: SG→TH Successful Payment (ACCC) - Happy Flow
-INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, created_at, updated_at)
+INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, occurred_at, updated_at)
 VALUES (
     'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
     (SELECT quote_id FROM quotes LIMIT 1),
@@ -367,7 +367,7 @@ VALUES (
 );
 
 -- Event history for Payment 1
-INSERT INTO payment_events (uetr, event_type, actor, data, created_at)
+INSERT INTO payment_events (uetr, event_type, actor, data, occurred_at)
 VALUES
     ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'PAYMENT_INITIATED', 'DBSSSGSG', '{"amount": 1000.00, "currency": "SGD"}'::jsonb, NOW() - INTERVAL '2 hours'),
     ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'QUOTE_SELECTED', 'NEXUS', '{"quoteId": "quote-001", "rate": 25.50}'::jsonb, NOW() - INTERVAL '1 hour 59 minutes'),
@@ -377,7 +377,7 @@ VALUES
     ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'SETTLEMENT_COMPLETED', 'THIPSOPS', '{"settledAmount": 25500.00}'::jsonb, NOW() - INTERVAL '1 hour 55 minutes');
 
 -- Sample Payment 2: SG→MY Successful Payment (ACCC) - Happy Flow
-INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, created_at, updated_at)
+INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, occurred_at, updated_at)
 VALUES (
     'b2c3d4e5-f6a7-8901-bcde-f23456789012',
     (SELECT quote_id FROM quotes LIMIT 1),
@@ -392,7 +392,7 @@ VALUES (
 );
 
 -- Event history for Payment 2
-INSERT INTO payment_events (uetr, event_type, actor, data, created_at)
+INSERT INTO payment_events (uetr, event_type, actor, data, occurred_at)
 VALUES
     ('b2c3d4e5-f6a7-8901-bcde-f23456789012', 'PAYMENT_INITIATED', 'DBSSSGSG', '{"amount": 500.00, "currency": "SGD"}'::jsonb, NOW() - INTERVAL '1 day'),
     ('b2c3d4e5-f6a7-8901-bcde-f23456789012', 'QUOTE_SELECTED', 'NEXUS', '{"quoteId": "quote-002", "rate": 3.45}'::jsonb, NOW() - INTERVAL '23 hours 59 minutes'),
@@ -400,7 +400,7 @@ VALUES
     ('b2c3d4e5-f6a7-8901-bcde-f23456789012', 'SETTLEMENT_COMPLETED', 'MYIPSOPS', '{"settledAmount": 1725.00}'::jsonb, NOW() - INTERVAL '23 hours 55 minutes');
 
 -- Sample Payment 3: SG→IN Successful Payment (ACCC) - Happy Flow
-INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, created_at, updated_at)
+INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, occurred_at, updated_at)
 VALUES (
     'c3d4e5f6-a7b8-9012-cdef-345678901234',
     (SELECT quote_id FROM quotes LIMIT 1),
@@ -415,7 +415,7 @@ VALUES (
 );
 
 -- Event history for Payment 3
-INSERT INTO payment_events (uetr, event_type, actor, data, created_at)
+INSERT INTO payment_events (uetr, event_type, actor, data, occurred_at)
 VALUES
     ('c3d4e5f6-a7b8-9012-cdef-345678901234', 'PAYMENT_INITIATED', 'OCBCSGSG', '{"amount": 2000.00, "currency": "SGD"}'::jsonb, NOW() - INTERVAL '3 days'),
     ('c3d4e5f6-a7b8-9012-cdef-345678901234', 'QUOTE_SELECTED', 'NEXUS', '{"quoteId": "quote-003", "rate": 61.80}'::jsonb, NOW() - INTERVAL '2 days 23 hours 59 minutes'),
@@ -424,7 +424,7 @@ VALUES
     ('c3d4e5f6-a7b8-9012-cdef-345678901234', 'SETTLEMENT_COMPLETED', 'INIPSOPS', '{"settledAmount": 123600.00}'::jsonb, NOW() - INTERVAL '2 days 23 hours 55 minutes');
 
 -- Sample Payment 4: RJCT - Insufficient Funds (AM04) - Unhappy Flow
-INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, created_at, updated_at)
+INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, occurred_at, updated_at)
 VALUES (
     'd4e5f6a7-b8c9-0123-defa-456789012345',
     (SELECT quote_id FROM quotes LIMIT 1),
@@ -439,14 +439,14 @@ VALUES (
 );
 
 -- Event history for Payment 4 (Rejected)
-INSERT INTO payment_events (uetr, event_type, actor, data, created_at)
+INSERT INTO payment_events (uetr, event_type, actor, data, occurred_at)
 VALUES
     ('d4e5f6a7-b8c9-0123-defa-456789012345', 'PAYMENT_INITIATED', 'DBSSSGSG', '{"amount": 50000.00, "currency": "SGD"}'::jsonb, NOW() - INTERVAL '5 hours'),
     ('d4e5f6a7-b8c9-0123-defa-456789012345', 'QUOTE_SELECTED', 'NEXUS', '{"quoteId": "quote-004"}'::jsonb, NOW() - INTERVAL '4 hours 59 minutes'),
     ('d4e5f6a7-b8c9-0123-defa-456789012345', 'PAYMENT_REJECTED', 'DBSSSGSG', '{"reason": "AM04", "description": "Insufficient funds in debtor account"}'::jsonb, NOW() - INTERVAL '4 hours 59 minutes');
 
 -- Sample Payment 5: RJCT - Account Closed (AC04) - Unhappy Flow
-INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, created_at, updated_at)
+INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, occurred_at, updated_at)
 VALUES (
     'e5f6a7b8-c9d0-1234-efab-567890123456',
     (SELECT quote_id FROM quotes LIMIT 1),
@@ -461,13 +461,13 @@ VALUES (
 );
 
 -- Event history for Payment 5 (Rejected)
-INSERT INTO payment_events (uetr, event_type, actor, data, created_at)
+INSERT INTO payment_events (uetr, event_type, actor, data, occurred_at)
 VALUES
     ('e5f6a7b8-c9d0-1234-efab-567890123456', 'PAYMENT_INITIATED', 'DBSSSGSG', '{"amount": 100.00}'::jsonb, NOW() - INTERVAL '1 day'),
     ('e5f6a7b8-c9d0-1234-efab-567890123456', 'PAYMENT_REJECTED', 'NEXUS', '{"reason": "AC04", "description": "Recipient account has been closed"}'::jsonb, NOW() - INTERVAL '23 hours 59 minutes');
 
 -- Sample Payment 6: RJCT - Quote Expired (AB04) - Unhappy Flow
-INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, created_at, updated_at)
+INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, occurred_at, updated_at)
 VALUES (
     'f6a7b8c9-d0e1-2345-fabc-678901234567',
     (SELECT quote_id FROM quotes LIMIT 1),
@@ -482,13 +482,13 @@ VALUES (
 );
 
 -- Event history for Payment 6 (Rejected - Quote Expired)
-INSERT INTO payment_events (uetr, event_type, actor, data, created_at)
+INSERT INTO payment_events (uetr, event_type, actor, data, occurred_at)
 VALUES
     ('f6a7b8c9-d0e1-2345-fabc-678901234567', 'PAYMENT_INITIATED', 'DBSSSGSG', '{"amount": 750.00}'::jsonb, NOW() - INTERVAL '2 days'),
     ('f6a7b8c9-d0e1-2345-fabc-678901234567', 'PAYMENT_REJECTED', 'NEXUS', '{"reason": "AB04", "description": "Quote expired - exchange rate guarantee lapsed"}'::jsonb, NOW() - INTERVAL '1 day 23 hours 59 minutes');
 
 -- Sample Payment 7: RJCT - Invalid Proxy (BE23) - Unhappy Flow
-INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, created_at, updated_at)
+INSERT INTO payments (uetr, quote_id, source_psp_bic, destination_psp_bic, debtor_name, debtor_account, creditor_name, creditor_account, source_currency, destination_currency, source_amount, exchange_rate, status, status_reason_code, occurred_at, updated_at)
 VALUES (
     'a7b8c9d0-e1f2-3456-abcd-789012345678',
     (SELECT quote_id FROM quotes LIMIT 1),
@@ -503,19 +503,19 @@ VALUES (
 );
 
 -- Event history for Payment 7 (Rejected - Invalid Proxy)
-INSERT INTO payment_events (uetr, event_type, actor, data, created_at)
+INSERT INTO payment_events (uetr, event_type, actor, data, occurred_at)
 VALUES
     ('a7b8c9d0-e1f2-3456-abcd-789012345678', 'PAYMENT_INITIATED', 'DBSSSGSG', '{"amount": 300.00}'::jsonb, NOW() - INTERVAL '3 days'),
     ('a7b8c9d0-e1f2-3456-abcd-789012345678', 'PROXY_RESOLUTION_FAILED', 'PHPDO', '{"proxy": "+639999999999", "error": "Proxy not found"}'::jsonb, NOW() - INTERVAL '2 days 23 hours 59 minutes'),
     ('a7b8c9d0-e1f2-3456-abcd-789012345678', 'PAYMENT_REJECTED', 'NEXUS', '{"reason": "BE23", "description": "Account/Proxy invalid - not registered in PDO"}'::jsonb, NOW() - INTERVAL '2 days 23 hours 58 minutes');
 
 -- Store ISO 20022 messages for sample payments
-INSERT INTO iso20022_messages (uetr, message_type, message_xml, created_at)
+INSERT INTO iso20022_messages (uetr, message_type, pacs008_message, occurred_at)
 SELECT 
     p.uetr,
     'pacs.008',
-    '<?xml version="1.0" encoding="UTF-8"?><Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13"><FIToFICstmrCdtTrf><GrpHdr><MsgId>MSG' || substr(p.uetr::text, 1, 8) || '</MsgId><CreDtTm>' || p.created_at::text || '</CreDtTm></GrpHdr><CdtTrfTxInf><PmtId><UETR>' || p.uetr::text || '</UETR></PmtId><IntrBkSttlmAmt Ccy="' || p.source_currency || '">' || p.source_amount::text || '</IntrBkSttlmAmt></CdtTrfTxInf></FIToFICstmrCdtTrf></Document>',
-    p.created_at
+    '<?xml version="1.0" encoding="UTF-8"?><Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13"><FIToFICstmrCdtTrf><GrpHdr><MsgId>MSG' || substr(p.uetr::text, 1, 8) || '</MsgId><CreDtTm>' || p.occurred_at::text || '</CreDtTm></GrpHdr><CdtTrfTxInf><PmtId><UETR>' || p.uetr::text || '</UETR></PmtId><IntrBkSttlmAmt Ccy="' || p.source_currency || '">' || p.source_amount::text || '</IntrBkSttlmAmt></CdtTrfTxInf></FIToFICstmrCdtTrf></Document>',
+    p.occurred_at
 FROM payments p
 WHERE p.uetr IN (
     'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -528,7 +528,7 @@ WHERE p.uetr IN (
 );
 
 -- Store pacs.002 responses for sample payments
-INSERT INTO iso20022_messages (uetr, message_type, message_xml, created_at)
+INSERT INTO iso20022_messages (uetr, message_type, pacs008_message, occurred_at)
 SELECT 
     p.uetr,
     'pacs.002',
