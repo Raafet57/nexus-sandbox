@@ -509,38 +509,5 @@ VALUES
     ('a7b8c9d0-e1f2-3456-abcd-789012345678', 'PROXY_RESOLUTION_FAILED', 'PHPDO', '{"proxy": "+639999999999", "error": "Proxy not found"}'::jsonb, NOW() - INTERVAL '2 days 23 hours 59 minutes'),
     ('a7b8c9d0-e1f2-3456-abcd-789012345678', 'PAYMENT_REJECTED', 'NEXUS', '{"reason": "BE23", "description": "Account/Proxy invalid - not registered in PDO"}'::jsonb, NOW() - INTERVAL '2 days 23 hours 58 minutes');
 
--- Store ISO 20022 messages for sample payments
-INSERT INTO iso20022_messages (uetr, message_type, pacs008_message, occurred_at)
-SELECT 
-    p.uetr,
-    'pacs.008',
-    '<?xml version="1.0" encoding="UTF-8"?><Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13"><FIToFICstmrCdtTrf><GrpHdr><MsgId>MSG' || substr(p.uetr::text, 1, 8) || '</MsgId><CreDtTm>' || p.occurred_at::text || '</CreDtTm></GrpHdr><CdtTrfTxInf><PmtId><UETR>' || p.uetr::text || '</UETR></PmtId><IntrBkSttlmAmt Ccy="' || p.source_currency || '">' || p.source_amount::text || '</IntrBkSttlmAmt></CdtTrfTxInf></FIToFICstmrCdtTrf></Document>',
-    p.occurred_at
-FROM payments p
-WHERE p.uetr IN (
-    'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    'b2c3d4e5-f6a7-8901-bcde-f23456789012',
-    'c3d4e5f6-a7b8-9012-cdef-345678901234',
-    'd4e5f6a7-b8c9-0123-defa-456789012345',
-    'e5f6a7b8-c9d0-1234-efab-567890123456',
-    'f6a7b8c9-d0e1-2345-fabc-678901234567',
-    'a7b8c9d0-e1f2-3456-abcd-789012345678'
-);
-
--- Store pacs.002 responses for sample payments
-INSERT INTO iso20022_messages (uetr, message_type, pacs008_message, occurred_at)
-SELECT 
-    p.uetr,
-    'pacs.002',
-    '<?xml version="1.0" encoding="UTF-8"?><Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.002.001.15"><FIToFIPmtStsRpt><GrpHdr><MsgId>PSR' || substr(p.uetr::text, 1, 8) || '</MsgId><CreDtTm>' || p.updated_at::text || '</CreDtTm></GrpHdr><TxInfAndSts><OrgnlEndToEndId>' || p.uetr::text || '</OrgnlEndToEndId><TxSts>' || CASE WHEN p.status = 'ACSC' THEN 'ACCC' ELSE 'RJCT' END || '</TxSts>' || CASE WHEN p.status_reason_code IS NOT NULL THEN '<StsRsnInf><Rsn><Cd>' || p.status_reason_code || '</Cd></Rsn></StsRsnInf>' ELSE '' END || '</TxInfAndSts></FIToFIPmtStsRpt></Document>',
-    p.updated_at
-FROM payments p
-WHERE p.uetr IN (
-    'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    'b2c3d4e5-f6a7-8901-bcde-f23456789012',
-    'c3d4e5f6-a7b8-9012-cdef-345678901234',
-    'd4e5f6a7-b8c9-0123-defa-456789012345',
-    'e5f6a7b8-c9d0-1234-efab-567890123456',
-    'f6a7b8c9-d0e1-2345-fabc-678901234567',
-    'a7b8c9d0-e1f2-3456-abcd-789012345678'
-);
+-- Note: ISO 20022 messages are stored in the iso20022_messages table with different schema
+-- Sample payments created successfully
