@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+#### Deep Parity Remediation (Feb 7, 2026 - Session 3)
+- **Rate Limiting Middleware**: In-memory sliding window rate limiter with per-endpoint limits (e.g., 30/min for pacs.008, 60/min for quotes), X-RateLimit-* headers, and configurable `NEXUS_RATE_LIMIT_*` env vars
+- **Settlement Positions**: `GET /v1/liquidity/positions` endpoint for FXP net positions across currency pairs, sourced from actual payment data with fallback examples
+- **camt.103 XML Extraction**: `camt103.py` now parses reservation details (amount, currency, accountId, reservationType) from XML using lxml
+- **pacs.004 Sandbox Mode**: Upgraded from 501 stub to functional return processing with reason code validation, return recording, and status cache updates
+- **camt.056 Sandbox Mode**: Upgraded from 501 stub to functional recall processing with duplicate detection, state tracking, and recall ID generation
+- **NEXUS_RELEASE_1_STRICT**: New env var to toggle between sandbox mode (default) and strict Release 1 behavior (501 for pacs.004/camt.056)
+
 ### Fixed
+
+#### Parity Audit Remediation (Feb 7, 2026 - Session 2)
+- **pacs.002 Namespace**: Aligned callback XML namespace from `001.10` to `001.15` to match pacs.008.py builders
+- **Callback Timeout**: Made configurable via `NEXUS_CALLBACK_TIMEOUT_SECONDS` env var (default 10s)
+- **Callback Parameters**: `schedule_pacs002_delivery` now forwards `currency` and `amount` parameters
+- **pacs.004 XML Extraction**: Replaced placeholder `EXTRACTED_FROM_XML` with proper lxml-based OrgnlUETR parsing
+- **camt.056 XML Extraction**: Replaced placeholder with lxml-based OrgnlUETR extraction for recall requests
+- **camt.029 XML Extraction**: Replaced placeholder with lxml-based CxlStsId/recall reference extraction
+- **Quote Expiry Guard**: Added defense-in-depth pre-submission expiry check in InteractiveDemo `handleConfirmPayment`
+
+### Added
+- **TROUBLESHOOTING.md**: Comprehensive troubleshooting guide for Docker, API, frontend, database, and health checks
+- **Audit Trail Events**: pacs.004 and recall handlers now store audit trail events for all processed messages
 
 #### ISO 20022 Compliance
 - **ACSC Status Code**: Added `ACSC` (Accepted Settlement Completed) to TransactionStatus enum - now correctly returned in pacs.002 responses

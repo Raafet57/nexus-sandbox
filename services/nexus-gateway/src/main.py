@@ -23,6 +23,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from src.api import countries, quotes, rates, fees, health, currencies, fin_insts, fee_formulas, iso20022, address_types, relationships, intermediary_agents, reconciliation, liquidity, returns, qr, addressing, payments_explorer, actors, psp, ips, pdo, demo_data, sanctions, fxp, sap
 from src.config import settings
 from src.db import database
+from src.middleware.rate_limiter import RateLimitMiddleware
 from src.observability import setup_tracing
 
 
@@ -95,7 +96,7 @@ This API implements the complete 17-step payment flow:
 - `acmt.023` - Identification Verification Request (proxy resolution)
 - `acmt.024` - Identification Verification Report (account details)
 - `camt.054` - Bank to Customer Debit/Credit Notification (reconciliation)
-- `pacs.004` - Payment Return (not yet supported)
+- `pacs.004` - Payment Return (sandbox simulation)
 - `camt.056` - FI to FI Payment Cancellation Request (recall)
 
 ### Reference Documentation
@@ -215,6 +216,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
+
+# Rate limiting middleware
+# Configure via NEXUS_RATE_LIMIT_REQUESTS_PER_MINUTE, NEXUS_RATE_LIMIT_BURST, NEXUS_RATE_LIMIT_ENABLED
+app.add_middleware(RateLimitMiddleware)
 
 # Setup OpenTelemetry tracing
 if settings.otel_enabled:

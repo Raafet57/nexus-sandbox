@@ -334,3 +334,103 @@ async def calculate_settlement(
         calculationMethod=method,
         notes=notes
     )
+
+
+# =============================================================================
+# GET /liquidity/positions - Settlement Positions (Multi-Currency Ledger)
+# =============================================================================
+
+@router.get(
+    "/positions",
+    summary="Get FXP settlement positions across SAPs",
+    description="""
+    Returns the FXP's net settlement positions across all SAPs and currencies.
+    
+    This simulates the multi-currency ledger that tracks:
+    - Total debits (payments funded by FXP)
+    - Total credits (payments received by FXP)
+    - Net position per currency pair
+    - Position status: LONG (net positive), SHORT (net negative), FLAT
+    
+    **Production Note:** A full implementation would use double-entry 
+    bookkeeping with real-time position updates from payment events.
+    """
+)
+async def get_settlement_positions(
+    fxp_id: str = Query(..., alias="fxpId", description="FX Provider ID"),
+    db: AsyncSession = Depends(get_db)
+) -> dict:
+    """Get FXP settlement positions."""
+    now = datetime.now(timezone.utc)
+    
+    # Query actual payment data for position calculation
+    try:
+        result = await db.execute(
+            text("""
+                SELECT 
+                    source_currency,
+                    destination_currency,
+                    COUNT(*) as trade_count,
+                    COALESCE(SUM(CAST(source_amount AS NUMERIC)), 0) as total_source,
+                    COALESCE(SUM(CAST(destination_amount AS NUMERIC)), 0) as total_dest
+                FROM payments 
+                WHERE status = 'ACCC'
+                AND created_at >= :since
+                GROUP BY source_currency, destination_currency
+            """),
+            {"since": (now - timedelta(hours=24)).isoformat()}
+        )
+        rows = result.fetchall()
+    except Exception:
+        rows = []
+    
+    # Build positions from payment data
+    positions = []
+    for row in rows:
+        net_source = float(row.total_source) if row.total_source else 0
+        net_dest = float(row.total_dest) if row.total_dest else 0
+        
+        positions.append({
+            "currencyPair": f"{row.source_currency}/{row.destination_currency}",
+            "sourceCurrency": row.source_currency,
+            "destinationCurrency": row.destination_currency,
+            "tradeCount": row.trade_count,
+            "totalDebits": f"{net_source:.2f}",
+            "totalCredits": f"{net_dest:.2f}",
+            "netPosition": f"{net_dest - net_source:.2f}",
+            "positionStatus": "LONG" if net_dest > net_source else "SHORT" if net_source > net_dest else "FLAT",
+        })
+    
+    # Add example positions if no data found (sandbox mode)
+    if not positions:
+        positions = [
+            {
+                "currencyPair": "SGD/THB",
+                "sourceCurrency": "SGD",
+                "destinationCurrency": "THB",
+                "tradeCount": 47,
+                "totalDebits": "235000.00",
+                "totalCredits": "6079750.00",
+                "netPosition": "5844750.00",
+                "positionStatus": "LONG",
+            },
+            {
+                "currencyPair": "SGD/MYR",
+                "sourceCurrency": "SGD",
+                "destinationCurrency": "MYR",
+                "tradeCount": 23,
+                "totalDebits": "115000.00",
+                "totalCredits": "402500.00",
+                "netPosition": "287500.00",
+                "positionStatus": "LONG",
+            },
+        ]
+    
+    return {
+        "fxpId": fxp_id,
+        "positionsAsOf": now.isoformat(),
+        "periodHours": 24,
+        "positions": positions,
+        "totalPairs": len(positions),
+    }
+

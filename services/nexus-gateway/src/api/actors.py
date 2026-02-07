@@ -263,19 +263,29 @@ async def list_actors(
 ):
     """List registered actors with optional filtering."""
     
-    query = text("""
+    # Build query dynamically to avoid asyncpg type inference issues
+    conditions = []
+    params = {}
+    
+    if actor_type:
+        conditions.append("actor_type = :actor_type")
+        params["actor_type"] = actor_type.upper()
+    
+    if country_code:
+        conditions.append("country_code = :country_code")
+        params["country_code"] = country_code.upper()
+    
+    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+    
+    query = text(f"""
         SELECT actor_id, bic, actor_type, name, country_code, 
                callback_url, supported_currencies, status, registered_at
         FROM actors
-        WHERE (:actor_type IS NULL OR actor_type = :actor_type)
-        AND (:country_code IS NULL OR country_code = :country_code)
+        {where_clause}
         ORDER BY registered_at DESC
     """)
     
-    result = await db.execute(query, {
-        "actor_type": actor_type.upper() if actor_type else None,
-        "country_code": country_code.upper() if country_code else None
-    })
+    result = await db.execute(query, params)
     
     actors = []
     for row in result.fetchall():

@@ -1,13 +1,15 @@
 """
-Payment Return and Recall Processing (FUTURE FEATURES)
+Payment Return and Recall Processing
 
 pacs.004 - PaymentReturn (Return payment initiated by Destination PSP)
 camt.056 - FI to FI Payment Cancellation Request (Recall initiated by Source PSP)
+camt.029 - Resolution of Investigation (Response to recall)
+pacs.028 - FI to FI Payment Status Request
 
-> [!IMPORTANT] Nexus Release 1 Status (NotebookLM 2026-02-03):
-> - pacs.004 is NOT SUPPORTED in Release 1. Returns use new pacs.008 with NexusOrgnlUETR: prefix.
-> - camt.056 is NOT SUPPORTED in Release 1. Recalls use manual Nexus Service Desk workflow.
-> - These endpoints return 501 Not Implemented with guidance on Release 1 alternatives.
+> [!NOTE] Nexus Release 1 Status
+> pacs.004 and camt.056 are not supported in production Release 1.
+> This sandbox provides functional simulation for educational purposes.
+> Set NEXUS_RELEASE_1_STRICT=true to enforce 501 Not Implemented behavior.
 
 Reference: https://docs.nexusglobalpayments.org/payment-processing
 """
@@ -108,24 +110,23 @@ return_payments = []
 @router.post(
     "/pacs004",
     response_model=Pacs004Response,
-    summary="[FUTURE] pacs.004 Payment Return",
+    summary="pacs.004 Payment Return",
     description="""
-    **⚠️ NOT IMPLEMENTED IN NEXUS RELEASE 1**
+    **Process pacs.004 Payment Return**
     
-    This endpoint returns 501 Not Implemented per Nexus Release 1 specification.
+    Accepts a payment return request from the Destination PSP.
     
-    ## Nexus Release 1 Alternative
+    > [!NOTE] Nexus Release 1 Status
+    > In production Release 1, returns use a **new pacs.008** with `NexusOrgnlUETR:` prefix.
+    > This sandbox simulates pacs.004 processing for educational purposes.
+    > Set `NEXUS_RELEASE_1_STRICT=true` to enforce 501 behavior.
     
-    In Release 1, returns are processed using a **new pacs.008 payment** in the
-    reverse direction, referencing the original UETR in the remittance info:
+    ## Sandbox Behavior
     
-    ```xml
-    <AddtlRmtInf>NexusOrgnlUETR:91398cbd-0838-453f-b2c7-536e829f2b8e</AddtlRmtInf>
-    ```
-    
-    **Use POST /v1/iso20022/pacs008 instead** with the NexusOrgnlUETR prefix.
-    
-    NotebookLM (2026-02-03): "pacs.004 is not yet supported. Returns use new pacs.008."
+    1. Validates the return request
+    2. Records the return with reason code
+    3. Links return to original payment via UETR
+    4. Updates payment status cache
     """
 )
 async def receive_pacs004(
@@ -133,22 +134,67 @@ async def receive_pacs004(
     response: Response,
     db: AsyncSession = Depends(get_db)
 ) -> Pacs004Response:
-    """Process incoming pacs.004 payment return - NOT IMPLEMENTED in Release 1."""
+    """Process incoming pacs.004 payment return."""
     
-    # Return 501 Not Implemented per Nexus Release 1 spec
-    response.headers["X-Nexus-Feature-Status"] = "FUTURE"
-    response.headers["X-Nexus-Release"] = "Available in Release 2"
+    import os
+    # Strict Release 1 mode: return 501 like production
+    if os.getenv("NEXUS_RELEASE_1_STRICT", "false").lower() == "true":
+        response.headers["X-Nexus-Feature-Status"] = "FUTURE"
+        response.headers["X-Nexus-Release"] = "Available in Release 2"
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "error": "FEATURE_NOT_IMPLEMENTED",
+                "message": "pacs.004 PaymentReturn is not supported in strict Release 1 mode.",
+                "alternative": "Use POST /v1/iso20022/pacs008 with NexusOrgnlUETR: prefix in remittance info",
+                "hint": "Set NEXUS_RELEASE_1_STRICT=false to enable sandbox simulation"
+            }
+        )
     
-    raise HTTPException(
-        status_code=501,
-        detail={
-            "error": "FEATURE_NOT_IMPLEMENTED",
-            "message": "pacs.004 PaymentReturn is not supported in Nexus Release 1.",
-            "alternative": "Use POST /v1/iso20022/pacs008 with NexusOrgnlUETR: prefix in remittance info",
-            "example": "<AddtlRmtInf>NexusOrgnlUETR:" + request.originalUetr + "</AddtlRmtInf>",
-            "reference": "https://docs.nexusglobalpayments.org/payment-processing/return-payments",
-            "release": "pacs.004 support planned for Nexus Release 2"
-        }
+    # Sandbox mode: simulate pacs.004 processing
+    processed_at = datetime.now(timezone.utc)
+    return_id = str(uuid4())
+    
+    # Validate reason code
+    try:
+        reason = ReturnReasonCode(request.returnReasonCode)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid return reason code: {request.returnReasonCode}. "
+                   f"Valid codes: {[e.value for e in ReturnReasonCode]}"
+        )
+    
+    # Record the return
+    return_record = {
+        "returnId": return_id,
+        "originalUetr": request.originalUetr,
+        "returnReasonCode": reason.value,
+        "returnReasonText": request.returnReasonText or "",
+        "amount": request.amount,
+        "currency": request.currency,
+        "initiatedBy": request.initiatedBy or "DESTINATION_PSP",
+        "status": "COMPLETED",
+        "processedAt": processed_at.isoformat(),
+    }
+    return_payments.append(return_record)
+    
+    # Update status cache for pacs.028 queries
+    payment_status_cache[request.originalUetr] = {
+        "uetr": request.originalUetr,
+        "status": "RTRN",
+        "reasonCode": reason.value,
+        "updatedAt": processed_at.isoformat()
+    }
+    
+    response.headers["X-Nexus-Feature-Status"] = "SANDBOX"
+    
+    return Pacs004Response(
+        originalUetr=request.originalUetr,
+        returnId=return_id,
+        status="COMPLETED",
+        message=f"Payment return processed (sandbox). Reason: {reason.value}",
+        processedAt=processed_at.isoformat()
     )
 
 
@@ -159,25 +205,23 @@ async def receive_pacs004(
 @router.post(
     "/camt056",
     response_model=Camt056Response,
-    summary="[FUTURE] camt.056 Cancellation Request (Recall)",
+    summary="camt.056 Cancellation Request (Recall)",
     description="""
-    **⚠️ NOT IMPLEMENTED IN NEXUS RELEASE 1**
+    **Process camt.056 Payment Cancellation Request (Recall)**
     
-    This endpoint returns 501 Not Implemented per Nexus Release 1 specification.
+    Source PSP submits a recall request for a previously sent payment.
     
-    ## Nexus Release 1 Alternative
+    > [!NOTE] Nexus Release 1 Status
+    > In production Release 1, recalls use the Nexus Service Desk.
+    > This sandbox simulates camt.056 processing for educational purposes.
+    > Set `NEXUS_RELEASE_1_STRICT=true` to enforce 501 behavior.
     
-    In Release 1, recall requests are **logged manually** in the Nexus Service Desk:
+    ## Sandbox Behavior
     
-    1. Source PSP logs "Payment Recall Request" in Nexus Service Desk
-    2. Destination PSP reviews within SLA
-    3. If accepted → Destination PSP initiates return via pacs.008
-    4. If rejected → Destination PSP provides reason code
-    
-    **Use the Service Desk portal** at `/service-desk` for manual recall workflow.
-    
-    NotebookLM (2026-02-03): "camt.056 is not implemented in Nexus Release 1.
-    Recalls are handled via manual Service Desk workflow."
+    1. Validates the cancellation request
+    2. Creates a pending recall with unique ID
+    3. D-PSP can respond via `/recalls/{uetr}/respond`
+    4. Resolution tracked via camt.029
     """
 )
 async def submit_camt056(
@@ -185,27 +229,76 @@ async def submit_camt056(
     response: Response,
     db: AsyncSession = Depends(get_db)
 ) -> Camt056Response:
-    """Submit a payment recall request - NOT IMPLEMENTED in Release 1."""
+    """Submit a payment recall request."""
     
-    # Return 501 Not Implemented per Nexus Release 1 spec
-    response.headers["X-Nexus-Feature-Status"] = "FUTURE"
-    response.headers["X-Nexus-Release"] = "Available in Release 2"
+    import os
+    # Strict Release 1 mode: return 501 like production
+    if os.getenv("NEXUS_RELEASE_1_STRICT", "false").lower() == "true":
+        response.headers["X-Nexus-Feature-Status"] = "FUTURE"
+        response.headers["X-Nexus-Release"] = "Available in Release 2"
+        raise HTTPException(
+            status_code=501,
+            detail={
+                "error": "FEATURE_NOT_IMPLEMENTED",
+                "message": "camt.056 is not supported in strict Release 1 mode.",
+                "alternative": "Log a 'Payment Recall Request' in the Nexus Service Desk portal",
+                "hint": "Set NEXUS_RELEASE_1_STRICT=false to enable sandbox simulation"
+            }
+        )
     
-    raise HTTPException(
-        status_code=501,
-        detail={
-            "error": "FEATURE_NOT_IMPLEMENTED",
-            "message": "camt.056 Payment Cancellation Request is not supported in Nexus Release 1.",
-            "alternative": "Log a 'Payment Recall Request' in the Nexus Service Desk portal",
-            "workflow": [
-                "1. Navigate to /service-desk in the dashboard",
-                "2. Create a new Recall Request with the original UETR",
-                "3. Destination PSP reviews and accepts/rejects",
-                "4. If accepted, D-PSP initiates pacs.008 return payment"
-            ],
-            "reference": "https://docs.nexusglobalpayments.org/payment-processing/recall-requests",
-            "release": "camt.056 support planned for Nexus Release 2"
-        }
+    # Sandbox mode: simulate camt.056 processing
+    processed_at = datetime.now(timezone.utc)
+    recall_id = f"RECALL-{uuid4().hex[:12].upper()}"
+    
+    # Validate reason code
+    try:
+        reason = CancellationReasonCode(request.cancellationReasonCode)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid cancellation reason code: {request.cancellationReasonCode}. "
+                   f"Valid codes: {[e.value for e in CancellationReasonCode]}"
+        )
+    
+    # Check for duplicate recall
+    if request.originalUetr in pending_recalls:
+        existing = pending_recalls[request.originalUetr]
+        if existing["status"] == RecallStatus.PENDING.value:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Recall already pending for UETR {request.originalUetr}. "
+                       f"Recall ID: {existing['recallId']}"
+            )
+    
+    # Create recall request  
+    pending_recalls[request.originalUetr] = {
+        "recallId": recall_id,
+        "originalUetr": request.originalUetr,
+        "cancellationReasonCode": reason.value,
+        "cancellationReasonText": request.cancellationReasonText or "",
+        "requestedBy": request.requestedBy or "SOURCE_PSP",
+        "status": RecallStatus.PENDING.value,
+        "createdAt": processed_at.isoformat(),
+        "slaDeadline": None,  # Would be calculated from SLA config
+    }
+    
+    # Update status cache
+    payment_status_cache[request.originalUetr] = {
+        "uetr": request.originalUetr,
+        "status": "RECALL_PENDING",
+        "reasonCode": reason.value,
+        "updatedAt": processed_at.isoformat()
+    }
+    
+    response.headers["X-Nexus-Feature-Status"] = "SANDBOX"
+    
+    return Camt056Response(
+        originalUetr=request.originalUetr,
+        recallId=recall_id,
+        status=RecallStatus.PENDING.value,
+        message=f"Recall request created (sandbox). Reason: {reason.value}. "
+                f"D-PSP can respond via POST /v1/iso20022/recalls/{request.originalUetr}/respond",
+        processedAt=processed_at.isoformat()
     )
 
 

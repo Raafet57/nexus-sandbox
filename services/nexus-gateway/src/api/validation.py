@@ -85,7 +85,7 @@ class SchemaRegistry:
             # Optional - SAP Integration
             "camt.103": "camt.103.001.03.xsd",         # ✅ Exists at root (also in camt_2025/)
             "pain.001": "pain.001.001.12.xsd",         # ✅ Exists at root
-            # Future/Roadmap
+            # Sandbox-active (pacs.004/camt.056 functional when NEXUS_RELEASE_1_STRICT=false)
             "pacs.004": "pacs.004.001.14.xsd",         # ✅ Exists at root (also in pacs_2024_2025/)
             "pacs.028": "pacs.028.001.06.xsd",         # ✅ Exists at root (also in pacs_2024_2025/)
             "camt.056": "camt.056.001.11.xsd",         # ✅ Exists at root (also in camt_2025/)
@@ -262,7 +262,7 @@ def validate_camt054(xml_content: str | bytes) -> ValidationResult:
     return validate_xml(xml_content, "camt.054")
 
 
-# Optional - SAP Integration
+# SAP Integration
 def validate_camt103(xml_content: str | bytes) -> ValidationResult:
     """Validate camt.103 (Create Reservation - SAP Method 2a)."""
     return validate_xml(xml_content, "camt.103")
@@ -273,7 +273,7 @@ def validate_pain001(xml_content: str | bytes) -> ValidationResult:
     return validate_xml(xml_content, "pain.001")
 
 
-# Future/Roadmap
+# Sandbox-active (Returns & Recalls)
 def validate_pacs028(xml_content: str | bytes) -> ValidationResult:
     """Validate pacs.028 (FI to FI Payment Status Request)."""
     return validate_xml(xml_content, "pacs.028")
@@ -317,10 +317,10 @@ def detect_message_type(xml_content: str | bytes) -> Optional[str]:
             'acmt.023': 'acmt.023',
             'acmt.024': 'acmt.024',
             'camt.054': 'camt.054',
-            # Optional - SAP Integration
+            # SAP Integration
             'camt.103': 'camt.103',
             'pain.001': 'pain.001',
-            # Future/Roadmap
+            # Sandbox-active (Returns & Recalls)
             'pacs.004': 'pacs.004',
             'pacs.028': 'pacs.028',
             'camt.056': 'camt.056',
@@ -352,7 +352,7 @@ def detect_message_type(xml_content: str | bytes) -> Optional[str]:
                     return 'camt.103'
                 elif 'CstmrCdtTrfInitn' in child_name:
                     return 'pain.001'
-                # Future/Roadmap messages
+                # Sandbox-active (Returns & Recalls) messages
                 elif 'PmtRtr' in child_name:
                     return 'pacs.004'
                 elif 'FIToFIPmtStsReq' in child_name:

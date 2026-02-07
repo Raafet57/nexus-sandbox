@@ -310,6 +310,30 @@ export function InteractiveDemo() {
     }, [sourceCountry, destCountry, amount, amountType, proxyType, proxyValue, sourceFeeType]);
 
     const handleSelectQuote = useCallback(async (quote: Quote) => {
+        // Validate quote hasn't expired before selection
+        const expiresAt = new Date(quote.expiresAt).getTime();
+        const remainingSecs = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+
+        if (remainingSecs <= 0) {
+            notifications.show({
+                title: "Quote Expired",
+                message: "This quote has expired. Please search for new quotes.",
+                color: "red",
+                icon: <IconX size={16} />,
+            });
+            return; // Prevent selection of expired quote
+        }
+
+        // Warn if quote is about to expire (< 60 seconds)
+        if (remainingSecs < 60) {
+            notifications.show({
+                title: "Quote Expiring Soon",
+                message: `This quote expires in ${remainingSecs} seconds. Complete payment quickly!`,
+                color: "orange",
+                icon: <IconAlertTriangle size={16} />,
+            });
+        }
+
         setSelectedQuote(quote);
         setLoading(true);
         try {
@@ -329,6 +353,19 @@ export function InteractiveDemo() {
 
     const handleConfirmPayment = useCallback(async () => {
         if (!selectedQuote || !resolution) return;
+
+        // Defense-in-depth: Check quote expiry before submission
+        const quoteExpiresAt = new Date(selectedQuote.expiresAt).getTime();
+        if (Date.now() >= quoteExpiresAt) {
+            notifications.show({
+                title: "Quote Expired",
+                message: "This quote has expired since you selected it. Please go back and select a new quote.",
+                color: "red",
+                icon: <IconX size={16} />,
+            });
+            return;
+        }
+
         setLoading(true);
 
         // Generate UETR for the payment

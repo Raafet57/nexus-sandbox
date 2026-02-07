@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 # In production, this should be loaded from environment/secret management
 # For sandbox, we use a default shared secret (MUST be changed in production)
 _DEV_SHARED_SECRET = "nexus-sandbox-shared-secret-change-in-production"
+
+# Configurable callback timeout (seconds) - per audit recommendation
+CALLBACK_TIMEOUT_SECONDS = float(os.environ.get("NEXUS_CALLBACK_TIMEOUT_SECONDS", "10"))
 DEFAULT_SHARED_SECRET = os.environ.get("NEXUS_CALLBACK_SECRET", _DEV_SHARED_SECRET)
 
 # Warn if using dev secret
@@ -36,7 +39,7 @@ if DEFAULT_SHARED_SECRET == _DEV_SHARED_SECRET:
 
 # pacs.002 XML Template
 PACS002_TEMPLATE = '''<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.002.001.10">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.002.001.15">
   <FIToFIPmtStsRpt>
     <GrpHdr>
       <MsgId>{msg_id}</MsgId>
@@ -188,7 +191,7 @@ async def deliver_pacs002_callback(
     
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=CALLBACK_TIMEOUT_SECONDS) as client:
                 response = await client.post(
                     callback_url,
                     content=pacs002_xml,
@@ -225,6 +228,8 @@ async def schedule_pacs002_delivery(
     status: str,
     reason_code: Optional[str] = None,
     additional_info: Optional[str] = None,
+    currency: str = "USD",
+    amount: str = "0.00",
     delay_seconds: float = 0.5
 ):
     """
@@ -237,7 +242,9 @@ async def schedule_pacs002_delivery(
         uetr=uetr,
         status=status,
         reason_code=reason_code,
-        additional_info=additional_info
+        additional_info=additional_info,
+        currency=currency,
+        amount=amount
     )
 
 
