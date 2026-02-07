@@ -108,3 +108,9 @@ docs.nexusglobalpayments.org_documentation.md
 nohup.out
 server.log
 *.out
+
+# Replit
+.replit
+.replit.backup
+replit.md
+replit.nix
