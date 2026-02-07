@@ -40,16 +40,15 @@ async def list_currencies(
     query = text("""
         SELECT 
             c.currency_code,
-            c.currency_name,
+            c.name,
             c.decimal_places,
-            c.is_active,
             COALESCE(
                 array_agg(DISTINCT cc.country_code) FILTER (WHERE cc.country_code IS NOT NULL),
                 ARRAY[]::text[]
             ) as countries
         FROM currencies c
         LEFT JOIN country_currencies cc ON c.currency_code = cc.currency_code
-        GROUP BY c.currency_code, c.currency_name, c.decimal_places, c.is_active
+        GROUP BY c.currency_code, c.name, c.decimal_places
         ORDER BY c.currency_code
     """)
     
@@ -59,11 +58,10 @@ async def list_currencies(
     currencies = []
     for row in rows:
         currencies.append(CurrencyResponse(
-            currencyCode=row.currency_code,
-            currencyName=row.currency_name,
-            decimalPlaces=row.decimal_places,
-            countries=list(row.countries) if row.countries else [],
-            isActive=row.is_active
+            code=row.currency_code,
+            name=row.name,
+            fractional_digits=row.decimal_places,
+            is_active=True
         ))
     
     return CurrenciesListResponse(currencies=currencies)
@@ -89,17 +87,10 @@ async def get_currency(
     query = text("""
         SELECT 
             c.currency_code,
-            c.currency_name,
-            c.decimal_places,
-            c.is_active,
-            COALESCE(
-                array_agg(DISTINCT cc.country_code) FILTER (WHERE cc.country_code IS NOT NULL),
-                ARRAY[]::text[]
-            ) as countries
+            c.name,
+            c.decimal_places
         FROM currencies c
-        LEFT JOIN country_currencies cc ON c.currency_code = cc.currency_code
         WHERE c.currency_code = :currency_code
-        GROUP BY c.currency_code, c.currency_name, c.decimal_places, c.is_active
     """)
     
     result = await db.execute(query, {"currency_code": currency_code.upper()})
@@ -112,11 +103,8 @@ async def get_currency(
         )
     
     return CurrencyResponse(
-        currencyCode=row.currency_code,
-        currencyName=row.currency_name,
-        decimalPlaces=row.decimal_places,
-        countries=list(row.countries) if row.countries else [],
-        isActive=row.is_active
+        code=row.currency_code,
+        name=row.name,
+        fractional_digits=row.decimal_places,
+        is_active=True
     )
-
-

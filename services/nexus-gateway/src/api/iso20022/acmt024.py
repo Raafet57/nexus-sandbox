@@ -68,9 +68,55 @@ async def process_acmt024(
             detail={"error": "XSD_VALIDATION_FAILED", "errors": xsd_result.errors}
         )
     
+    # Parse ISO 20022 fields per documentation
+    # XPath: /Document/IdVrfctnRpt/Rpt/Vrfctn for true/false
+    # XPath: /Document/IdVrfctnRpt/Rpt/UpdtdPtyAndAcctId/Pty/Nm for party name
+    # XPath: /Document/IdVrfctnRpt/Rpt/UpdtdPtyAndAcctId/Acct/Nm for display name
+    # XPath: /Document/IdVrfctnRpt/Rpt/Rsn/Cd for error code
+    try:
+        from lxml import etree
+        root = etree.fromstring(xml_content.encode())
+        ns = {"doc": "urn:iso:std:iso:20022:tech:xsd:acmt.024.001.04"}
+        
+        def get_text(xpath, default=None):
+            elements = root.xpath(xpath, namespaces=ns)
+            if elements:
+                return elements[0].text if hasattr(elements[0], 'text') else str(elements[0])
+            # Try without namespace  
+            simple_xpath = xpath.replace('doc:', '')
+            elements = root.xpath(simple_xpath)
+            if elements:
+                return elements[0].text if hasattr(elements[0], 'text') else str(elements[0])
+            return default
+        
+        parsed_fields = {
+            "messageId": get_text(".//doc:MsgId") or get_text(".//MsgId"),
+            "originalId": get_text(".//doc:OrgnlId") or get_text(".//OrgnlId"),
+            "verificationResult": get_text(".//doc:Vrfctn") or get_text(".//Vrfctn"),
+            "reasonCode": get_text(".//doc:Rsn/doc:Cd") or get_text(".//Rsn/Cd"),
+            # Party and account details
+            "partyName": get_text(".//doc:UpdtdPtyAndAcctId/doc:Pty/doc:Nm") or get_text(".//UpdtdPtyAndAcctId/Pty/Nm"),
+            "accountName": get_text(".//doc:UpdtdPtyAndAcctId/doc:Acct/doc:Nm") or get_text(".//UpdtdPtyAndAcctId/Acct/Nm"),
+            "accountId": get_text(".//doc:UpdtdPtyAndAcctId/doc:Acct/doc:Id/doc:Othr/doc:Id") or get_text(".//UpdtdPtyAndAcctId/Acct/Id/Othr/Id"),
+            "iban": get_text(".//doc:UpdtdPtyAndAcctId/doc:Acct/doc:Id/doc:IBAN") or get_text(".//UpdtdPtyAndAcctId/Acct/Id/IBAN"),
+            "agentBic": get_text(".//doc:UpdtdPtyAndAcctId/doc:Agt/doc:FinInstnId/doc:BICFI") or get_text(".//UpdtdPtyAndAcctId/Agt/FinInstnId/BICFI"),
+        }
+        
+        logger.info(f"Parsed acmt.024: {parsed_fields}")
+        
+        # Determine status based on verification result
+        verification_passed = parsed_fields.get("verificationResult", "").lower() == "true"
+        display_name = parsed_fields.get("accountName") or parsed_fields.get("partyName") or "REDACTED"
+        
+    except Exception as e:
+        logger.warning(f"Failed to parse acmt.024 fields: {e}")
+        parsed_fields = {}
+        verification_passed = False
+        display_name = "REDACTED"
+    
     return Acmt024Response(
         requestId=request_id,
-        status="RECEIVED",
-        debtorNameMasked="REDACTED",
+        status="VERIFIED" if verification_passed else "FAILED",
+        debtorNameMasked=display_name,
         processedAt=processed_at.isoformat()
     )

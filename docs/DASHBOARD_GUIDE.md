@@ -27,11 +27,25 @@ The dashboard simulates all five actor types in the Nexus ecosystem:
 **Features**:
 - Select destination country and IPS
 - Enter amount and see real-time FX quotes
+- Select fee type (INVOICED/DEDUCTED)
 - Choose best quote from multiple FXPs
+- View intermediary agents (settlement routing)
 - Enter recipient's proxy (mobile, email)
 - Trigger proxy resolution via PDO
-- Confirm and submit payment
+- Provide sanctions screening data (FATF R16)
+- Enter payment reference (remittance info)
+- Select instruction priority (HIGH/NORM)
+- Confirm recipient details (explicit confirmation)
+- Submit payment with full ISO 20022 pacs.008
 - View pacs.002 confirmation
+
+**Mandatory Fields in pacs.008**:
+- `AccptncDtTm` - Acceptance Date Time
+- `InstrPrty` - Instruction Priority (HIGH=25s, NORM=4hr)
+- `ClrSys` - Clearing System Code (SGFAST, THBRT)
+- `IntrmyAgt1` - Source SAP BIC
+- `IntrmyAgt2` - Destination SAP BIC
+- `RmtInf` - Payment Reference (sender message)
 
 **Reference**: [Payment Setup](https://docs.nexusglobalpayments.org/payment-setup/)
 
@@ -64,11 +78,21 @@ The dashboard simulates all five actor types in the Nexus ecosystem:
 **Features**:
 - Configure base rates for currency pairs
 - Set spread in basis points (bps)
+- Define tier-based rate improvements (volume discounts)
+- Manage PSP-specific relationships and markups
 - View quote request history
 - Monitor accepted vs. rejected quotes
 - Simulate rate volatility
+- Receive trade notifications via webhooks
 
-**Key Concept**: Tier-based improvements—rates get better with volume.
+**Key Concepts**:
+- **Tier-based improvements**: Rates get better with volume
+- **PSP Relationships**: Special pricing for preferred partners
+
+**API Endpoints**:
+- `POST /v1/fxp/rates` - Submit rates with improvements
+- `POST /v1/fxp/psp-relationships` - Configure PSP pricing
+- `GET /v1/fxp/notifications` - Trade notifications
 
 **Reference**: [FX Provision](https://docs.nexusglobalpayments.org/fx-provision/)
 
@@ -76,20 +100,30 @@ The dashboard simulates all five actor types in the Nexus ecosystem:
 
 ## 💰 Liquidity (SAP) (`/sap`)
 
-**Purpose**: Settlement Access Provider liquidity monitoring.
+**Purpose**: Settlement Access Provider liquidity monitoring and nostro account management.
 
 **Actor Role**: SAPs provide prefunded accounts for cross-border settlement.
 
 **Features**:
 - View prefunded balances by currency
+- Manage FXP nostro accounts
+- Reserve/release liquidity for trades
 - Monitor settlement queue
 - Track daily settlement volumes
 - View position limits
+- Generate camt.054 reconciliation reports
 
 **Key Fields**:
 - `InstrAgnt` (Instructing Agent)
 - `InstdAgnt` (Instructed Agent)
 - `SttlmAcct` (Settlement Account)
+- `IntrmyAgt1/2` (Intermediary Agents in pacs.008)
+
+**API Endpoints**:
+- `GET /v1/sap/nostro-accounts` - List FXP accounts
+- `POST /v1/sap/liquidity/reserve` - Reserve liquidity
+- `POST /v1/sap/liquidity/release` - Release liquidity
+- `POST /v1/sap/reconciliation` - Generate reports
 
 **Reference**: [Settlement Mechanism](https://docs.nexusglobalpayments.org/settlement/)
 
@@ -221,6 +255,62 @@ The dashboard simulates all five actor types in the Nexus ecosystem:
 - Mock data configuration
 - Logging verbosity
 - Theme (light/dark)
+
+---
+
+## 🛠️ Service Desk (`/service-desk`)
+
+**Purpose**: Manual investigation, dispute resolution, and payment recall management.
+
+**Actor Role**: Operations teams managing payment exceptions.
+
+**Features**:
+- **Search Investigations**: Look up payments by UETR, quote ID, or actor
+- **Log New Case**: Create investigation cases for disputes
+- **Case Management**: Track case status (OPEN, IN_REVIEW, RESOLVED, CLOSED)
+- **Initiate Recalls**: Trigger payment returns via camt.056
+- **Status Reports**: View pacs.002 responses and reasons
+
+**API Endpoints**:
+- `GET /v1/service-desk/cases` - List all investigation cases
+- `POST /v1/service-desk/cases` - Create new investigation case
+- `GET /v1/service-desk/cases/{caseId}` - Get case details
+- `POST /v1/service-desk/cases/{caseId}/recall` - Initiate payment recall
+
+**Reference**: [Investigations](https://docs.nexusglobalpayments.org/operations/investigations/)
+
+---
+
+## 🎭 Actor Registry (`/actors`)
+
+**Purpose**: Manage sandbox participant registration and callback configuration.
+
+**Features**:
+- **View All Actors**: List of all registered PSPs, FXPs, SAPs, PDOs, IPSs
+- **Register New Actor**: Add new participants to the sandbox
+- **Callback Configuration**: Set callback URLs for each actor
+- **Test Callbacks**: Verify callback endpoints are reachable
+- **Filter by Type**: View actors by type (PSP, FXP, SAP, PDO, IPS)
+- **Country Filter**: View actors by country
+
+**Actor Registration Modal**:
+Click the "Register Actor" button to open the registration form with:
+- **BIC Code**: 8 or 11 character BIC (ISO 9362 format)
+- **Actor Type**: PSP, FXP, SAP, PDO, or IPS
+- **Country Code**: 2-letter ISO country code
+- **Organization Name**: Full legal name
+- **Callback URL**: Optional webhook URL for notifications
+- **Supported Currencies**: Multi-select for applicable currencies
+
+**API Endpoints**:
+- `GET /v1/actors` - List all actors (with optional filters)
+- `POST /v1/actors/register` - Register new actor
+- `GET /v1/actors/{bic}` - Get actor details
+- `PATCH /v1/actors/{bic}/callback` - Update callback URL
+- `POST /v1/actors/{bic}/callback-test` - Test callback endpoint
+- `DELETE /v1/actors/{bic}` - Deregister actor
+
+**Reference**: [Actor Onboarding](https://docs.nexusglobalpayments.org/participating-entities/onboarding/)
 
 ---
 

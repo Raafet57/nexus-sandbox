@@ -3,6 +3,9 @@
 
 export const MOCK_ENABLED = import.meta.env.VITE_MOCK_DATA === "true" || import.meta.env.VITE_GITHUB_PAGES === "true";
 
+// Track confirmed quotes for Step 12 validation
+const confirmedQuotes = new Set<string>();
+
 // ============================================================================
 // CURRENCY-AWARE FX RATES
 // ============================================================================
@@ -332,9 +335,10 @@ export function generateMockQuotes(
     const baseRate = FX_RATES[rateKey] || 1.0;
 
     // Generate 2-3 quotes from different FXPs with varying spreads
+    // Using FXP codes matching seed data (FXP-ABC, FXP-XYZ)
     const fxps = [
-        { id: "NEXUSFXP1", name: "Nexus FXP Alpha", spreadBps: 50 },
-        { id: "NEXUSFXP2", name: "Global FX Partners", spreadBps: 65 },
+        { id: "FXP-ABC", name: "ABC Currency Exchange", spreadBps: 50 },
+        { id: "FXP-XYZ", name: "XYZ Forex Ltd", spreadBps: 65 },
     ];
 
     return fxps.map((fxp, idx) => {
@@ -399,15 +403,45 @@ export function generateMockQuotes(
     });
 }
 
-export function getMockFeeBreakdown(quoteId: string): MockFeeBreakdown | null {
+export function getMockFeeBreakdown(quoteId: string, sourceFeeType: "INVOICED" | "DEDUCTED" = "INVOICED"): MockFeeBreakdown | null {
     // Check if this is a dynamically generated quote
     const cachedQuote = mockQuotesCache.get(quoteId);
-    if (cachedQuote) return cachedQuote.fees;
+    if (cachedQuote) {
+        // Adjust fees based on sourceFeeType
+        const fees = { ...cachedQuote.fees };
+        const principal = parseFloat(fees.senderPrincipal);
+        const pspFee = parseFloat(fees.sourcePspFee);
+
+        if (sourceFeeType === "DEDUCTED") {
+            // When DEDUCTED, fee is taken from principal
+            // Sender pays exactly principal, recipient gets principal - fee converted
+            fees.senderTotal = principal.toFixed(2);
+        } else {
+            // When INVOICED (default), fee is added on top
+            // Sender pays principal + fee
+            fees.senderTotal = (principal + pspFee).toFixed(2);
+        }
+        fees.sourcePspFeeType = sourceFeeType;
+        return fees;
+    }
 
     // Fallback to static quotes only if exact match exists
     // Do NOT fall back to mockQuotes[0] as it's hardcoded for THB
     const staticQuote = mockQuotes.find(q => q.quoteId === quoteId);
-    return staticQuote?.fees || null;
+    if (staticQuote) {
+        const fees = { ...staticQuote.fees };
+        const principal = parseFloat(fees.senderPrincipal);
+        const pspFee = parseFloat(fees.sourcePspFee);
+
+        if (sourceFeeType === "DEDUCTED") {
+            fees.senderTotal = principal.toFixed(2);
+        } else {
+            fees.senderTotal = (principal + pspFee).toFixed(2);
+        }
+        fees.sourcePspFeeType = sourceFeeType;
+        return fees;
+    }
+    return null;
 }
 
 // Cache for dynamically generated quotes (keyed by quoteId)
@@ -428,7 +462,7 @@ export const mockCountries = [
         countryCode: "SG",
         name: "Singapore",
         currencies: [
-            { currencyCode: "SGD", maxAmount: "50000" }
+            { currencyCode: "SGD", maxAmount: "200000" }
         ],
         requiredMessageElements: { pacs008: [] }
     },
@@ -437,7 +471,7 @@ export const mockCountries = [
         countryCode: "TH",
         name: "Thailand",
         currencies: [
-            { currencyCode: "THB", maxAmount: "1500000" }
+            { currencyCode: "THB", maxAmount: "5000000" }
         ],
         requiredMessageElements: { pacs008: [] }
     },
@@ -446,7 +480,7 @@ export const mockCountries = [
         countryCode: "MY",
         name: "Malaysia",
         currencies: [
-            { currencyCode: "MYR", maxAmount: "200000" }
+            { currencyCode: "MYR", maxAmount: "10000000" }
         ],
         requiredMessageElements: { pacs008: [] }
     },
@@ -455,7 +489,7 @@ export const mockCountries = [
         countryCode: "ID",
         name: "Indonesia",
         currencies: [
-            { currencyCode: "IDR", maxAmount: "200000000" }
+            { currencyCode: "IDR", maxAmount: "1000000000" }
         ],
         requiredMessageElements: { pacs008: [] }
     },
@@ -464,7 +498,7 @@ export const mockCountries = [
         countryCode: "PH",
         name: "Philippines",
         currencies: [
-            { currencyCode: "PHP", maxAmount: "5000000" }
+            { currencyCode: "PHP", maxAmount: "10000000" }
         ],
         requiredMessageElements: { pacs008: [] }
     },
@@ -481,20 +515,21 @@ export const mockCountries = [
 
 // Pre-seeded PSPs
 export const mockPSPs = [
-    { psp_id: "psp-dbs-sg", bic: "DBSGSGSG", name: "DBS Bank Singapore", country_code: "SG", fee_percent: 0.5 },
+    { psp_id: "psp-dbs-sg", bic: "DBSSSGSG", name: "DBS Bank Singapore", country_code: "SG", fee_percent: 0.5 },
     { psp_id: "psp-uob-sg", bic: "UOVBSGSG", name: "UOB Singapore", country_code: "SG", fee_percent: 0.45 },
-    { psp_id: "psp-bkk-th", bic: "BKKBTHBK", name: "Bangkok Bank", country_code: "TH", fee_percent: 0.4 },
+    { psp_id: "psp-bkk-th", bic: "KASITHBK", name: "Kasikorn Bank Thailand", country_code: "TH", fee_percent: 0.3 },
     { psp_id: "psp-kbank-th", bic: "KASITHBK", name: "Kasikornbank", country_code: "TH", fee_percent: 0.35 },
-    { psp_id: "psp-mayb-my", bic: "MAYBMYKL", name: "Maybank Malaysia", country_code: "MY", fee_percent: 0.5 },
+    { psp_id: "psp-mayb-my", bic: "MABORKKL", name: "Maybank Malaysia", country_code: "MY", fee_percent: 0.4 },
     { psp_id: "psp-mandiri-id", bic: "BMRIIDJA", name: "Bank Mandiri", country_code: "ID", fee_percent: 0.4 },
 ];
 
-// Pre-seeded IPS
+// Pre-seeded IPS - Using correct clearing system IDs matching seed data
 export const mockIPSOperators = [
-    { ips_id: "ips-fast", name: "Singapore FAST", country_code: "SG", clearing_system_id: "SGIPSOPS", max_amount: 200000, currency_code: "SGD" },
-    { ips_id: "ips-promptpay", name: "Thailand PromptPay", country_code: "TH", clearing_system_id: "THIPSOPS", max_amount: 2000000, currency_code: "THB" },
-    { ips_id: "ips-duitnow", name: "Malaysia DuitNow", country_code: "MY", clearing_system_id: "MYIPSOPS", max_amount: 500000, currency_code: "MYR" },
-    { ips_id: "ips-bi-fast", name: "Indonesia BI-FAST", country_code: "ID", clearing_system_id: "IDIPSOPS", max_amount: 250000000, currency_code: "IDR" },
+    { ips_id: "ips-fast", name: "Singapore FAST", country_code: "SG", clearing_system_id: "FAST", max_amount: 200000, currency_code: "SGD" },
+    { ips_id: "ips-promptpay", name: "Thailand PromptPay", country_code: "TH", clearing_system_id: "PromptPay", max_amount: 5000000, currency_code: "THB" },
+    { ips_id: "ips-duitnow", name: "Malaysia DuitNow", country_code: "MY", clearing_system_id: "DuitNow", max_amount: 10000000, currency_code: "MYR" },
+    { ips_id: "ips-bi-fast", name: "Indonesia BI-FAST", country_code: "ID", clearing_system_id: "BI-FAST", max_amount: 1000000000, currency_code: "IDR" },
+    { ips_id: "ips-instapay", name: "Philippines InstaPay", country_code: "PH", clearing_system_id: "InstaPay", max_amount: 10000000, currency_code: "PHP" },
 ];
 
 // Pre-seeded PDOs
@@ -505,11 +540,11 @@ export const mockPDOs = [
     { pdo_id: "pdo-id", name: "QRIS Directory (ID)", country_code: "ID", supported_proxy_types: ["MBNO", "NIK", "QRIS"] },
 ];
 
-// Sample FX Rates (static reference)
+// Sample FX Rates (static reference) - Using correct FXP names
 export const mockFXRates = [
-    { rateId: "rate-1", sourceCurrency: "SGD", destinationCurrency: "THB", rate: 25.85, spreadBps: 50, fxpName: "Nexus FXP Alpha", validUntil: new Date(Date.now() + 600000).toISOString(), status: "ACTIVE" },
-    { rateId: "rate-2", sourceCurrency: "SGD", destinationCurrency: "MYR", rate: 3.45, spreadBps: 45, fxpName: "Nexus FXP Alpha", validUntil: new Date(Date.now() + 600000).toISOString(), status: "ACTIVE" },
-    { rateId: "rate-3", sourceCurrency: "SGD", destinationCurrency: "IDR", rate: 11423.50, spreadBps: 50, fxpName: "Nexus FXP Alpha", validUntil: new Date(Date.now() + 600000).toISOString(), status: "ACTIVE" },
+    { rateId: "rate-1", sourceCurrency: "SGD", destinationCurrency: "THB", rate: 25.85, spreadBps: 50, fxpName: "ABC Currency Exchange", validUntil: new Date(Date.now() + 600000).toISOString(), status: "ACTIVE" },
+    { rateId: "rate-2", sourceCurrency: "SGD", destinationCurrency: "MYR", rate: 3.45, spreadBps: 45, fxpName: "ABC Currency Exchange", validUntil: new Date(Date.now() + 600000).toISOString(), status: "ACTIVE" },
+    { rateId: "rate-3", sourceCurrency: "SGD", destinationCurrency: "IDR", rate: 11423.50, spreadBps: 50, fxpName: "ABC Currency Exchange", validUntil: new Date(Date.now() + 600000).toISOString(), status: "ACTIVE" },
 ] as any[];
 
 // Sample Payments (static reference - for initial Explorer data)
@@ -517,7 +552,7 @@ export const mockPayments = [
     {
         uetr: "91398cbd-0838-453f-b2c7-536e829f2b8e",
         quoteId: "quote-demo-1",
-        sourcePspBic: "DBSGSGSG",
+        sourcePspBic: "DBSSSGSG",
         destinationPspBic: "BMRIIDJA",
         debtorName: "John Tan",
         debtorAccount: "12345678",
@@ -533,20 +568,21 @@ export const mockPayments = [
     }
 ];
 
-// Sample Liquidity Balances
+// Sample Liquidity Balances - Using correct FXP ID
 export const mockLiquidityBalances = [
-    { fxpId: "NEXUSFXP1", fxpName: "Nexus FXP Alpha", currency: "SGD", totalBalance: 5000000, reservedAmount: 125000, availableBalance: 4875000, status: "ACTIVE" },
-    { fxpId: "NEXUSFXP1", fxpName: "Nexus FXP Alpha", currency: "THB", totalBalance: 150000000, reservedAmount: 3500000, availableBalance: 146500000, status: "ACTIVE" },
-    { fxpId: "NEXUSFXP1", fxpName: "Nexus FXP Alpha", currency: "MYR", totalBalance: 15000000, reservedAmount: 450000, availableBalance: 14550000, status: "ACTIVE" },
-    { fxpId: "NEXUSFXP1", fxpName: "Nexus FXP Alpha", currency: "IDR", totalBalance: 50000000000, reservedAmount: 1000000000, availableBalance: 49000000000, status: "ACTIVE" },
+    { fxpId: "FXP-ABC", fxpName: "ABC Currency Exchange", currency: "SGD", totalBalance: 5000000, reservedAmount: 125000, availableBalance: 4875000, status: "ACTIVE" },
+    { fxpId: "FXP-ABC", fxpName: "ABC Currency Exchange", currency: "THB", totalBalance: 150000000, reservedAmount: 3500000, availableBalance: 146500000, status: "ACTIVE" },
+    { fxpId: "FXP-ABC", fxpName: "ABC Currency Exchange", currency: "MYR", totalBalance: 15000000, reservedAmount: 450000, availableBalance: 14550000, status: "ACTIVE" },
+    { fxpId: "FXP-ABC", fxpName: "ABC Currency Exchange", currency: "IDR", totalBalance: 50000000000, reservedAmount: 1000000000, availableBalance: 49000000000, status: "ACTIVE" },
+    { fxpId: "FXP-XYZ", fxpName: "XYZ Forex Ltd", currency: "SGD", totalBalance: 3000000, reservedAmount: 75000, availableBalance: 2925000, status: "ACTIVE" },
 ];
 
 // Static quotes (fallback)
 export const mockQuotes = [
     {
         quoteId: "quote-demo-1",
-        fxpId: "NEXUSFXP1",
-        fxpName: "Nexus FXP Alpha",
+        fxpId: "FXP-ABC",
+        fxpName: "ABC Currency Exchange",
         sourceCurrency: "SGD",
         destinationCurrency: "THB",
         exchangeRate: "25.85",
@@ -578,24 +614,43 @@ export const mockQuotes = [
     },
 ];
 
-// Mock Actors for Mesh page
+// Mock Actors for Mesh page - Using correct BIC codes
 export const mockActors = [
-    { bic: "DBSGSGSG", name: "DBS Bank Singapore", actorType: "PSP" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "DBSSSGSG", name: "DBS Bank Singapore", actorType: "PSP" as const, countryCode: "SG", status: "ACTIVE" },
     { bic: "UOVBSGSG", name: "UOB Singapore", actorType: "PSP" as const, countryCode: "SG", status: "ACTIVE" },
-    { bic: "BKKBTHBK", name: "Bangkok Bank", actorType: "PSP" as const, countryCode: "TH", status: "ACTIVE" },
+    { bic: "KASITHBK", name: "Kasikorn Bank Thailand", actorType: "PSP" as const, countryCode: "TH", status: "ACTIVE" },
     { bic: "BMRIIDJA", name: "Bank Mandiri", actorType: "PSP" as const, countryCode: "ID", status: "ACTIVE" },
-    { bic: "MAYBMYKL", name: "Maybank Malaysia", actorType: "PSP" as const, countryCode: "MY", status: "ACTIVE" },
-    { bic: "SGIPSOPS", name: "Singapore FAST", actorType: "IPS" as const, countryCode: "SG", status: "ACTIVE" },
-    { bic: "THIPSOPS", name: "Thailand PromptPay", actorType: "IPS" as const, countryCode: "TH", status: "ACTIVE" },
-    { bic: "MYIPSOPS", name: "Malaysia DuitNow", actorType: "IPS" as const, countryCode: "MY", status: "ACTIVE" },
-    { bic: "IDIPSOPS", name: "Indonesia BI-FAST", actorType: "IPS" as const, countryCode: "ID", status: "ACTIVE" },
-    { bic: "NEXUSFXP1", name: "Nexus FXP Alpha", actorType: "FXP" as const, countryCode: "SG", status: "ACTIVE" },
-    { bic: "NEXUSSAP1", name: "Nexus SAP Singapore", actorType: "SAP" as const, countryCode: "SG", status: "ACTIVE" },
-    { bic: "NEXUSSAP2", name: "Nexus SAP Thailand", actorType: "SAP" as const, countryCode: "TH", status: "ACTIVE" },
-    { bic: "PDOSGOPS", name: "PayNow Directory", actorType: "PDO" as const, countryCode: "SG", status: "ACTIVE" },
-    { bic: "PDOTHOPS", name: "PromptPay Directory", actorType: "PDO" as const, countryCode: "TH", status: "ACTIVE" },
-    { bic: "PDOIDOPS", name: "QRIS Directory", actorType: "PDO" as const, countryCode: "ID", status: "ACTIVE" },
+    { bic: "MABORKKL", name: "Maybank Malaysia", actorType: "PSP" as const, countryCode: "MY", status: "ACTIVE" },
+    { bic: "CHASSGSG", name: "JPMorgan Chase Singapore", actorType: "PSP" as const, countryCode: "SG", status: "ACTIVE" },
+    // IPS Operators - using descriptive codes (not BICs)
+    { bic: "FAST", name: "Singapore FAST", actorType: "IPS" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "PromptPay", name: "Thailand PromptPay", actorType: "IPS" as const, countryCode: "TH", status: "ACTIVE" },
+    { bic: "DuitNow", name: "Malaysia DuitNow", actorType: "IPS" as const, countryCode: "MY", status: "ACTIVE" },
+    { bic: "BI-FAST", name: "Indonesia BI-FAST", actorType: "IPS" as const, countryCode: "ID", status: "ACTIVE" },
+    { bic: "InstaPay", name: "Philippines InstaPay", actorType: "IPS" as const, countryCode: "PH", status: "ACTIVE" },
+    // FXPs - using correct FXP codes
+    { bic: "FXP-ABC", name: "ABC Currency Exchange", actorType: "FXP" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "FXP-XYZ", name: "XYZ Forex Ltd", actorType: "FXP" as const, countryCode: "SG", status: "ACTIVE" },
+    // SAPs
+    { bic: "DBSSSGSG", name: "DBS Settlement Access", actorType: "SAP" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "KASITHBK", name: "Kasikorn Settlement Access", actorType: "SAP" as const, countryCode: "TH", status: "ACTIVE" },
+    // PDOs
+    { bic: "PayNow", name: "PayNow Directory", actorType: "PDO" as const, countryCode: "SG", status: "ACTIVE" },
+    { bic: "PromptPay-PDO", name: "PromptPay Directory", actorType: "PDO" as const, countryCode: "TH", status: "ACTIVE" },
+    { bic: "QRIS", name: "QRIS Directory", actorType: "PDO" as const, countryCode: "ID", status: "ACTIVE" },
+    { bic: "DuitNow-PDO", name: "DuitNow Directory", actorType: "PDO" as const, countryCode: "MY", status: "ACTIVE" },
 ];
+
+/**
+ * Add a new actor to the mock registry
+ */
+export function addMockActor(actor: typeof mockActors[0]): void {
+    // Check for duplicates
+    if (mockActors.some(a => a.bic === actor.bic)) {
+        throw new Error(`Actor with BIC ${actor.bic} already exists`);
+    }
+    mockActors.push(actor);
+}
 
 // Demo mode indicator
 export const DEMO_BANNER_MESSAGE = `
@@ -611,3 +666,377 @@ docker compose -f docker-compose.lite.yml up -d
 
 Then visit http://localhost:8080
 `;
+
+// ============================================================================
+// QUOTE CONFIRMATION & EXPIRY VALIDATION (Step 12 Parity)
+// ============================================================================
+
+// Track confirmed quotes for Step 12 validation
+// (Uses confirmedQuotes Set declared at top of file)
+
+/**
+ * Validate if a quote exists and is not expired
+ * Returns validation result with details
+ */
+export function validateQuoteForConfirmation(quoteId: string): {
+    valid: boolean;
+    expired: boolean;
+    exists: boolean;
+    message: string;
+} {
+    // Check if quote exists in cache
+    const cachedQuote = mockQuotesCache.get(quoteId);
+    if (!cachedQuote) {
+        // Also check static quotes
+        const staticQuote = mockQuotes.find(q => q.quoteId === quoteId);
+        if (!staticQuote) {
+            return {
+                valid: false,
+                expired: false,
+                exists: false,
+                message: "Quote not found. Please search for new quotes."
+            };
+        }
+        // Check if static quote is expired
+        const expiryTime = new Date(staticQuote.expiresAt).getTime();
+        const now = Date.now();
+        if (now > expiryTime) {
+            return {
+                valid: false,
+                expired: true,
+                exists: true,
+                message: "Quote has expired. Please search for new quotes."
+            };
+        }
+    } else {
+        // Check if cached quote is expired
+        const expiryTime = new Date(cachedQuote.expiresAt).getTime();
+        const now = Date.now();
+        if (now > expiryTime) {
+            return {
+                valid: false,
+                expired: true,
+                exists: true,
+                message: "Quote has expired. Please search for new quotes."
+            };
+        }
+    }
+
+    // Quote exists and is not expired
+    return {
+        valid: true,
+        expired: false,
+        exists: true,
+        message: "Quote is valid"
+    };
+}
+
+/**
+ * Record sender confirmation for a quote (Step 12)
+ * Returns confirmation response matching backend format
+ */
+export function recordSenderConfirmation(quoteId: string): {
+    quoteId: string;
+    confirmationStatus: string;
+    confirmationTimestamp: string;
+    proceedToExecution: boolean;
+    message: string;
+} {
+    const validation = validateQuoteForConfirmation(quoteId);
+
+    if (!validation.exists) {
+        return {
+            quoteId,
+            confirmationStatus: "REJECTED",
+            confirmationTimestamp: new Date().toISOString(),
+            proceedToExecution: false,
+            message: validation.message
+        };
+    }
+
+    if (validation.expired) {
+        return {
+            quoteId,
+            confirmationStatus: "REJECTED",
+            confirmationTimestamp: new Date().toISOString(),
+            proceedToExecution: false,
+            message: validation.message
+        };
+    }
+
+    // Record confirmation
+    confirmedQuotes.add(quoteId);
+
+    return {
+        quoteId,
+        confirmationStatus: "CONFIRMED",
+        confirmationTimestamp: new Date().toISOString(),
+        proceedToExecution: true,
+        message: "Sender confirmation recorded successfully"
+    };
+}
+
+/**
+ * Check if a quote has been confirmed by sender
+ */
+export function isQuoteConfirmed(quoteId: string): boolean {
+    return confirmedQuotes.has(quoteId);
+}
+
+// ============================================================================
+// MOCK DEMO DATA MANAGEMENT APIs
+// ============================================================================
+
+export interface MockDemoDataStats {
+    totalPayments: number;
+    paymentsByStatus: Record<string, number>;
+    totalQuotes: number;
+    totalEvents: number;
+    oldestPayment: string | null;
+    newestPayment: string | null;
+}
+
+export function getMockDemoDataStats(): MockDemoDataStats {
+    const payments = mockPaymentStore.list();
+    const paymentCounts: Record<string, number> = {};
+
+    payments.forEach(p => {
+        paymentCounts[p.status] = (paymentCounts[p.status] || 0) + 1;
+    });
+
+    const sortedByDate = payments.sort((a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    return {
+        totalPayments: payments.length,
+        paymentsByStatus: paymentCounts,
+        totalQuotes: mockQuotesCache.size + mockQuotes.length,
+        totalEvents: payments.reduce((sum, p) => sum + p.events.length, 0),
+        oldestPayment: sortedByDate[0]?.createdAt || null,
+        newestPayment: sortedByDate[sortedByDate.length - 1]?.createdAt || null
+    };
+}
+
+export interface MockPurgeResult {
+    dryRun: boolean;
+    deleted?: Record<string, number>;
+    wouldDelete?: Record<string, number>;
+    ageHours: number;
+    message: string;
+}
+
+export function purgeMockDemoData(
+    options: { ageHours?: number; includeQuotes?: boolean; dryRun?: boolean } = {}
+): MockPurgeResult {
+    const { ageHours = 24, includeQuotes = false, dryRun = false } = options;
+    const cutoffTime = Date.now() - (ageHours * 60 * 60 * 1000);
+
+    const payments = mockPaymentStore.list();
+    let deletedPayments = 0;
+
+    payments.forEach(p => {
+        const paymentTime = new Date(p.createdAt).getTime();
+        if (paymentTime < cutoffTime) {
+            deletedPayments++;
+        }
+    });
+
+    let deletedQuotes = 0;
+    if (includeQuotes) {
+        mockQuotesCache.forEach((quote, id) => {
+            const quoteTime = new Date(quote.expiresAt).getTime();
+            if (quoteTime < cutoffTime) {
+                if (!dryRun) {
+                    mockQuotesCache.delete(id);
+                }
+                deletedQuotes++;
+            }
+        });
+    }
+
+    const result: MockPurgeResult = {
+        dryRun,
+        ageHours,
+        message: dryRun
+            ? `Would delete ${deletedPayments} payments and ${deletedQuotes} quotes older than ${ageHours} hours`
+            : `Deleted ${deletedPayments} payments and ${deletedQuotes} quotes older than ${ageHours} hours`
+    };
+
+    if (dryRun) {
+        result.wouldDelete = {
+            payments: deletedPayments,
+            quotes: deletedQuotes,
+            events: payments
+                .filter(p => new Date(p.createdAt).getTime() < cutoffTime)
+                .reduce((sum, p) => sum + p.events.length, 0)
+        };
+    } else {
+        result.deleted = {
+            payments: deletedPayments,
+            quotes: deletedQuotes,
+            events: payments
+                .filter(p => new Date(p.createdAt).getTime() < cutoffTime)
+                .reduce((sum, p) => sum + p.events.length, 0)
+        };
+    }
+
+    return result;
+}
+
+// ============================================================================
+// ISO 20022 TEMPLATES (Mock)
+// ============================================================================
+
+export const mockIsoTemplates: Record<string, { name: string; description: string; xml: string }> = {
+    "pacs.008.001.13": {
+        name: "FI to FI Customer Credit Transfer",
+        description: "Customer credit transfer between financial institutions",
+        xml: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13\">\n  <FIToFICstmrCdtTrf>\n    <GrpHdr>\n      <MsgId>MSG-EXAMPLE</MsgId>\n      <CreDtTm>2026-01-01T00:00:00Z</CreDtTm>\n      <NbOfTxs>1</NbOfTxs>\n    </GrpHdr>\n  </FIToFICstmrCdtTrf>\n</Document>"
+    },
+    "pacs.002.001.12": {
+        name: "Payment Status Report",
+        description: "Status report for payment instructions",
+        xml: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:pacs.002.001.12\">\n  <FIToFIPmtStsRpt>\n    <GrpHdr>\n      <MsgId>STATUS-EXAMPLE</MsgId>\n      <CreDtTm>2026-01-01T00:00:00Z</CreDtTm>\n    </GrpHdr>\n  </FIToFIPmtStsRpt>\n</Document>"
+    },
+    "camt.054.001.11": {
+        name: "Bank to Customer Debit/Credit Notification",
+        description: "Reconciliation report for IPS operators",
+        xml: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Document xmlns=\"urn:iso:std:iso:20022:tech:xsd:camt.054.001.11\">\n  <BkToCstmrDbtCdtNtfctn>\n    <GrpHdr>\n      <MsgId>CAMT054-EXAMPLE</MsgId>\n      <CreDtTm>2026-01-01T00:00:00Z</CreDtTm>\n    </GrpHdr>\n  </BkToCstmrDbtCdtNtfctn>\n</Document>"
+    }
+};
+
+// ============================================================================
+// QR CODE MOCK APIs
+// ============================================================================
+
+export interface MockQRParseResult {
+    formatIndicator: string;
+    initiationType: string;
+    merchantAccountInfo: {
+        scheme: string;
+        proxyType: string | null;
+        proxyValue: string | null;
+        editable: boolean;
+    };
+    transactionCurrency: string | null;
+    transactionAmount: string | null;
+    merchantName: string | null;
+    merchantCity: string | null;
+    crc: string;
+    crcValid: boolean;
+}
+
+export function mockParseQRCode(qrData: string): MockQRParseResult {
+    const isValidFormat = qrData.startsWith("0002") || qrData.startsWith("SG");
+
+    return {
+        formatIndicator: "01",
+        initiationType: "11",
+        merchantAccountInfo: {
+            scheme: qrData.includes("PAYNOW") ? "PAYNOW" : "PROMPTPAY",
+            proxyType: "MBNO",
+            proxyValue: qrData.includes("+65") ? "+6591234567" : "+66812345678",
+            editable: true
+        },
+        transactionCurrency: qrData.includes("SGD") ? "702" : "764",
+        transactionAmount: qrData.includes("100") ? "100.00" : null,
+        merchantName: "Mock Merchant",
+        merchantCity: "SINGAPORE",
+        crc: "1234",
+        crcValid: isValidFormat
+    };
+}
+
+export function mockGenerateQRCode(params: {
+    scheme: string;
+    proxyType: string;
+    proxyValue: string;
+    amount?: number;
+    merchantName?: string;
+    merchantCity?: string;
+    reference?: string;
+    editable?: boolean;
+}): { qrData: string; scheme: string } {
+    const qrData = `000201010211${params.scheme === "PAYNOW" ? "2730" : "2930"}${params.proxyValue}5802${params.scheme === "PAYNOW" ? "SG" : "TH"}${params.amount ? `5408${params.amount.toFixed(2)}` : ""}5802${params.scheme === "PAYNOW" ? "702" : "764"}5910${params.merchantName || "MERCHANT"}6009${params.merchantCity || "CITY"}6304ABCD`;
+
+    return { qrData, scheme: params.scheme };
+}
+
+export function mockValidateQRCode(qrData: string): { valid: boolean; crcValid: boolean; formatValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+
+    if (!qrData || qrData.length < 10) {
+        errors.push("QR data too short");
+    }
+
+    if (!qrData.startsWith("00")) {
+        errors.push("Invalid format indicator");
+    }
+
+    const crcValid = qrData.length > 4;
+    const formatValid = errors.length === 0;
+
+    return {
+        valid: crcValid && formatValid,
+        crcValid,
+        formatValid,
+        errors
+    };
+}
+
+// ============================================================================
+// UPI MOCK APIs
+// ============================================================================
+
+export interface MockUPIData {
+    pa: string;
+    pn?: string;
+    am?: string;
+    cu: string;
+    tr?: string;
+    tn?: string;
+    mc?: string;
+}
+
+export function mockParseUPI(upiUri: string): { valid: boolean; data?: MockUPIData; error?: string } {
+    if (!upiUri.startsWith("upi://")) {
+        return { valid: false, error: "Invalid UPI URI format" };
+    }
+
+    try {
+        const url = new URL(upiUri);
+        const params = url.searchParams;
+
+        return {
+            valid: true,
+            data: {
+                pa: params.get("pa") || "test@upi",
+                pn: params.get("pn") || "Test Payee",
+                am: params.get("am") || undefined,
+                cu: params.get("cu") || "INR",
+                tr: params.get("tr") || undefined,
+                tn: params.get("tn") || undefined,
+                mc: params.get("mc") || undefined
+            }
+        };
+    } catch {
+        return { valid: false, error: "Failed to parse UPI URI" };
+    }
+}
+
+export function mockUpiToEMVCo(_upiUri: string, merchantCity?: string): { emvcoData: string; scheme: string } {
+    const emvcoData = mockGenerateQRCode({
+        scheme: "UPI",
+        proxyType: "UPIID",
+        proxyValue: "test@upi",
+        merchantCity: merchantCity || "MUMBAI"
+    }).qrData;
+
+    return { emvcoData, scheme: "emvco" };
+}
+
+export function mockEmvcoToUPI(_emvcoData: string): { upiUri: string; scheme: string } {
+    const upiUri = `upi://pay?pa=test@upi&pn=Test%20Payee&cu=INR`;
+    return { upiUri, scheme: "upi" };
+}

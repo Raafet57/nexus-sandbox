@@ -26,12 +26,12 @@ The sandbox includes 6 pre-registered actors for immediate testing:
 
 | BIC          | Actor Type | Name                     | Country |
 |--------------|------------|--------------------------|---------|
-| `DBSGSGSG`   | PSP        | DBS Bank Singapore       | SG      |
-| `BKKBTHBK`   | PSP        | Bangkok Bank             | TH      |
-| `MAYBMYKL`   | PSP        | Maybank Malaysia         | MY      |
-| `NEXUSFXP1`  | FXP        | Nexus FXP Alpha          | SG      |
-| `SGIPSOPS`   | IPS        | Singapore FAST IPS       | SG      |
-| `THIPSOPS`   | IPS        | Thailand PromptPay IPS   | TH      |
+| `DBSSSGSG`   | PSP        | DBS Bank Singapore       | SG      |
+| `KASITHBK`   | PSP        | Kasikorn Bank Thailand   | TH      |
+| `MABORKKL`   | PSP        | Maybank Malaysia         | MY      |
+| `FXP-ABC`    | FXP        | ABC Currency Exchange    | SG      |
+| `FAST`       | IPS        | Singapore FAST IPS       | SG      |
+| `PromptPay`  | IPS        | Thailand PromptPay IPS   | TH      |
 
 ---
 
@@ -119,7 +119,167 @@ Content-Type: application/json
 
 ---
 
-## 4. ISO 20022 Message Examples
+## 4.1. Sanctions Screening (FATF R16 Compliance)
+
+The sandbox implements **FATF Recommendation 16** sanctions screening for cross-border payments.
+
+### Screening Process
+
+Sanctions screening occurs during **Steps 10-11** of the payment flow:
+
+1. **Data Collection**: Sender and recipient information is collected
+2. **Screening**: Names are checked against sanctions lists
+3. **Decision**: Payment is blocked if a match is found
+
+**API Endpoint**:
+```bash
+POST /v1/sanctions/screen
+Content-Type: application/json
+
+{
+  "debtorName": "John Doe",
+  "creditorName": "Jane Smith",
+  "debtorCountry": "SG",
+  "creditorCountry": "TH",
+  "amount": 1000,
+  "currency": "SGD"
+}
+```
+
+**Response**:
+```json
+{
+  "screeningResult": "PASS",
+  "debtorMatch": false,
+  "creditorMatch": false,
+  "matchedLists": [],
+  "timestamp": "2026-02-07T10:30:00Z"
+}
+```
+
+### Demo Sanctions List
+
+The sandbox includes a demo sanctions list for testing. The following names will trigger **RR04** (Regulatory Block):
+- Kim Jong Un
+- Vladimir Putin
+- Osama bin Laden
+
+Configure via environment variable:
+```bash
+SANCTIONS_REJECT_NAMES=Kim Jong Un,Vladimir Putin,Osama bin Laden
+```
+
+### Error Codes
+
+| Code | Description |
+|------|-------------|
+| `RR04` | Regulatory Block - AML/CFT screening failed |
+| `AM02` | Amount Limit Exceeded - Above reporting threshold |
+| `AC06` | Account Inactive - Recipient account is dormant |
+
+**Reference**: [Sanctions Screening](https://docs.nexusglobalpayments.org/compliance/sanctions-screening/)
+
+---
+
+## 4.2. FXP Integration
+
+Foreign Exchange Providers (FXPs) submit rates and receive trade notifications.
+
+### Rate Submission
+
+```bash
+POST /v1/fxp/rates
+Content-Type: application/json
+
+{
+  "fxpCode": "FXP-ABC",
+  "sourceCurrency": "SGD",
+  "destinationCurrency": "THB",
+  "baseRate": 25.85,
+  "spreadBps": 50,
+  "validFrom": "2026-02-07T00:00:00Z",
+  "validUntil": "2026-02-07T23:59:59Z"
+}
+```
+
+### Tier-Based Improvements
+
+FXPs can offer better rates for high-volume transactions:
+
+```bash
+POST /v1/fxp/tier-improvements
+Content-Type: application/json
+
+{
+  "fxpCode": "FXP-ABC",
+  "currencyPair": "SGD-THB",
+  "improvements": [
+    {"minAmount": 1000, "improvementBps": 5},
+    {"minAmount": 10000, "improvementBps": 10},
+    {"minAmount": 50000, "improvementBps": 15}
+  ]
+}
+```
+
+### PSP Relationship Pricing
+
+FXPs can offer preferential rates to specific PSPs:
+
+```bash
+POST /v1/fxp/psp-relationships
+Content-Type: application/json
+
+{
+  "fxpCode": "FXP-ABC",
+  "pspBic": "DBSSSGSG",
+  "improvementBps": 5
+}
+```
+
+**Reference**: [FX Provision](https://docs.nexusglobalpayments.org/fx-provision/)
+
+---
+
+## 4.3. SAP Integration
+
+Settlement Access Providers (SAPs) manage FXP nostro/vostro accounts.
+
+### Liquidity Management
+
+```bash
+# Check FXP account balance
+GET /v1/sap/accounts/{fxpId}
+
+# Credit FXP account (after receiving funds)
+POST /v1/sap/accounts/{fxpId}/credit
+{
+  "amount": 1000000,
+  "currency": "SGD",
+  "reference": "Funding from FXP head office"
+}
+
+# Debit FXP account (for settlement)
+POST /v1/sap/accounts/{fxpId}/debit
+{
+  "amount": 50000,
+  "currency": "THB",
+  "reference": "Settlement for quote {quoteId}"
+}
+```
+
+### Intermediary Agent Information
+
+```bash
+GET /v1/sap/intermediary-agent
+```
+
+Returns SAP routing information for payment settlement.
+
+**Reference**: [Settlement Access](https://docs.nexusglobalpayments.org/settlement-access-provision/)
+
+---
+
+## 5. ISO 20022 Message Examples
 
 ### 4.1. Proxy Resolution (`acmt.023` / `acmt.024`)
 
@@ -141,7 +301,7 @@ Content-Type: application/json
   "resolutionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "accountNumber": "0123456789",
   "accountType": "BBAN",
-  "agentBic": "BKKBTHBK",
+  "agentBic": "KASITHBK",
   "beneficiaryName": "Somchai Thai",
   "displayName": "Somchai T.",
   "status": "VALIDATED",
@@ -249,12 +409,12 @@ Test that your `callbackUrl` correctly receives ISO messages:
 
 ```bash
 # 1. Register with callback URL
-curl -X POST http://localhost:3000/v1/actors/register \
+curl -X POST http://localhost:8000/v1/actors/register \
   -H "Content-Type: application/json" \
   -d '{"bic": "TESTSGSG", "name": "Test Actor", "actorType": "PSP", "callbackUrl": "https://your-webhook.com/nexus"}'
 
 # 2. Test callback delivery
-curl -X POST http://localhost:3000/v1/actors/TESTSGSG/callback-test
+curl -X POST http://localhost:8000/v1/actors/TESTSGSG/callback-test
 
 # 3. Verify your endpoint received the test message
 ```
@@ -279,7 +439,191 @@ In Nexus Release 1, return payments use `pacs.008` with the original UETR in rem
 
 ---
 
-## 6. Assumptions & Limitations
+## 6. FXP Integration Guide
+
+### 6.1. Rate Submission with Improvements
+
+FXPs can submit rates with tier-based improvements:
+
+```bash
+POST /v1/fxp/rates
+Content-Type: application/json
+
+{
+  "fxpId": "YOURFXPXXX",
+  "sourceCurrency": "SGD",
+  "destinationCurrency": "THB",
+  "baseRate": 25.45,
+  "improvements": [
+    { "tier": 0, "bpsImprovement": 5 },
+    { "tier": 10000, "bpsImprovement": 10 },
+    { "tier": 50000, "bpsImprovement": 15 }
+  ],
+  "validUntil": "2026-02-03T16:00:00Z"
+}
+```
+
+### 6.2. PSP Relationship Configuration
+
+Configure PSP-specific pricing:
+
+```bash
+POST /v1/fxp/psp-relationships
+Content-Type: application/json
+
+{
+  "fxpId": "YOURFXPXXX",
+  "pspId": "DBSSSGSG",
+  "markupBps": 2,
+  "specialTerms": "preferential"
+}
+```
+
+### 6.3. Trade Notifications
+
+FXPs receive webhooks when their rate is selected:
+
+```bash
+GET /v1/fxp/notifications
+```
+
+Response includes trade details, UETR, and settlement instructions.
+
+---
+
+## 7. SAP Integration Guide
+
+### 7.1. Nostro Account Management
+
+Settlement Access Providers manage FXP accounts:
+
+```bash
+POST /v1/sap/nostro-accounts
+Content-Type: application/json
+
+{
+  "fxpId": "FXP-ABC",
+  "accountNumber": "1234567890",
+  "accountCurrency": "SGD",
+  "sapBic": "SGSAPXXX"
+}
+```
+
+### 7.2. Liquidity Operations
+
+Reserve liquidity for trades:
+
+```bash
+POST /v1/sap/liquidity/reserve
+Content-Type: application/json
+
+{
+  "fxpId": "FXP-ABC",
+  "amount": 100000,
+  "currency": "SGD",
+  "referenceUetr": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+Release reserved liquidity:
+
+```bash
+POST /v1/sap/liquidity/release
+Content-Type: application/json
+
+{
+  "fxpId": "FXP-ABC",
+  "currency": "SGD",
+  "referenceUetr": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+### 7.3. Reconciliation Reports
+
+Generate camt.054-style reconciliation:
+
+```bash
+POST /v1/sap/reconciliation
+Content-Type: application/json
+
+{
+  "fxpId": "FXP-ABC",
+  "startDate": "2026-02-01",
+  "endDate": "2026-02-03"
+}
+```
+
+---
+
+## 8. Callback Authentication (HMAC)
+
+All callbacks are authenticated using HMAC-SHA256 signatures to ensure message integrity.
+
+### 8.1. Callback Headers
+
+```http
+POST /your/callback/endpoint
+X-Callback-Signature: sha256=abc123def456...
+X-Callback-Timestamp: 1704067200
+Content-Type: application/json
+```
+
+### 8.2. Signature Verification
+
+**Python:**
+```python
+import hmac
+import hashlib
+
+def verify_callback(payload: str, signature: str, secret: str, timestamp: str) -> bool:
+    """
+    Verify HMAC-SHA256 callback signature
+    
+    Args:
+        payload: Raw request body as string
+        signature: Value from X-Callback-Signature header (without 'sha256=' prefix)
+        secret: Shared secret provided during actor registration
+        timestamp: Value from X-Callback-Timestamp header
+    """
+    message = f"{timestamp}:{payload}"
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        message.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+```
+
+**Node.js:**
+```javascript
+const crypto = require('crypto');
+
+function verifyCallback(payload, signature, secret, timestamp) {
+    const message = `${timestamp}:${payload}`;
+    const expected = crypto
+        .createHmac('sha256', secret)
+        .update(message)
+        .digest('hex');
+    return crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expected)
+    );
+}
+```
+
+### 8.3. Test Endpoint
+
+Verify your callback handling:
+
+```bash
+curl -X POST http://localhost:8000/v1/actors/YOURBIC/callback-test
+```
+
+This sends a test callback with a valid HMAC signature to your registered URL.
+
+---
+
+## 9. Assumptions & Limitations
 
 | Assumption | Description |
 |------------|-------------|

@@ -55,6 +55,7 @@ from ..schemas import (
 # Import routers for modular message handlers
 from . import (
     pacs008, 
+    pacs002,
     acmt023, 
     acmt024, 
     pain001, 
@@ -97,8 +98,8 @@ __all__ = [
     "Camt029Response",
     "ValidationResponse",
     "Iso20022Template",
-    # Routers
     "pacs008",
+    "pacs002",
     "acmt023",
     "acmt024",
     "pain001",
@@ -117,6 +118,7 @@ router = APIRouter(prefix="/v1/iso20022", tags=["ISO 20022 Messages"])
 
 # Include all submodule routers
 router.include_router(pacs008.router, tags=["pacs.008"])
+router.include_router(pacs002.router, tags=["pacs.002"])
 router.include_router(acmt023.router, tags=["acmt.023"])
 router.include_router(acmt024.router, tags=["acmt.024"])
 router.include_router(pain001.router, tags=["pain.001"])

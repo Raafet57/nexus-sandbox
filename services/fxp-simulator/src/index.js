@@ -33,7 +33,7 @@ const config = {
     // SAP Accounts (per NotebookLM: FXPs hold accounts at SAPs)
     sapAccounts: JSON.parse(process.env.SAP_ACCOUNTS || JSON.stringify({
         SG: { sapBic: 'DBSSSGSG', accountId: 'FXP-ABC-SG-001', balance: 1000000 },
-        TH: { sapBic: 'BKKBTHBK', accountId: 'FXP-ABC-TH-001', balance: 25000000 },
+        TH: { sapBic: 'KASITHBK', accountId: 'FXP-ABC-TH-001', balance: 25000000 },
         PH: { sapBic: 'ABORPHMM', accountId: 'FXP-ABC-PH-001', balance: 50000000 },
         MY: { sapBic: 'MABORMMM', accountId: 'FXP-ABC-MY-001', balance: 5000000 },
         ID: { sapBic: 'BNIDIDE1', accountId: 'FXP-ABC-ID-001', balance: 15000000000 },

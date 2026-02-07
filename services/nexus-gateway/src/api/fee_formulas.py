@@ -31,42 +31,44 @@ router = APIRouter(prefix="/v1", tags=["Fees"])
 from .schemas import FeeFormulaResponse, PreTransactionDisclosure
 
 
+# =============================================================================
+# Fee Calculation Functions - Import from Centralized fee_config.py (DRY)
+# =============================================================================
+
+from .fee_config import (
+    calculate_destination_psp_fee as _calc_dest_fee,
+    calculate_source_psp_fee as _calc_source_fee,
+    calculate_scheme_fee as _calc_scheme_fee,
+)
+
+
 def _calculate_destination_fee(gross_payout: Decimal, currency: str) -> Decimal:
     """
     Calculate destination PSP fee based on scheme rules.
     Fee is DEDUCTED from payout (beneficiary receives less).
+    
+    Now uses centralized fee_config.py to avoid duplication.
     """
-    fee_structures = {
-        "SGD": {"fixed": Decimal("0.50"), "percent": Decimal("0.001"), "min": Decimal("0.50"), "max": Decimal("5.00")},
-        "THB": {"fixed": Decimal("10.00"), "percent": Decimal("0.001"), "min": Decimal("10.00"), "max": Decimal("100.00")},
-        "MYR": {"fixed": Decimal("1.00"), "percent": Decimal("0.001"), "min": Decimal("1.00"), "max": Decimal("10.00")},
-        "PHP": {"fixed": Decimal("25.00"), "percent": Decimal("0.002"), "min": Decimal("25.00"), "max": Decimal("250.00")},
-        "IDR": {"fixed": Decimal("500"), "percent": Decimal("0.001"), "min": Decimal("500"), "max": Decimal("50000")},
-        "INR": {"fixed": Decimal("25.00"), "percent": Decimal("0.001"), "min": Decimal("25.00"), "max": Decimal("250.00")},
-    }
-    
-    struct = fee_structures.get(currency, {"fixed": Decimal("1.00"), "percent": Decimal("0.001"), "min": Decimal("1.00"), "max": Decimal("10.00")})
-    
-    calculated = struct["fixed"] + gross_payout * struct["percent"]
-    return max(struct["min"], min(struct["max"], calculated))
+    fee, _ = _calc_dest_fee(gross_payout, currency)
+    return fee
 
 
-def _calculate_source_psp_fee(principal: Decimal) -> Decimal:
+def _calculate_source_psp_fee(principal: Decimal, currency: str = "SGD") -> Decimal:
     """
-    Calculate source PSP fee.
-    Fee structure: 0.50 SGD fixed + 0.1% of principal, min 0.50, max 10.00
+    Calculate source PSP fee with currency context.
+    
+    Now uses centralized fee_config.py.
     """
-    calculated = Decimal("0.50") + principal * Decimal("0.001")
-    return max(Decimal("0.50"), min(Decimal("10.00"), calculated))
+    return _calc_source_fee(principal, currency)
 
 
 def _calculate_scheme_fee(principal: Decimal) -> Decimal:
     """
     Calculate Nexus scheme fee.
-    Fee structure: 0.10 SGD fixed + 0.05% of principal, min 0.10, max 5.00
+    
+    Now uses centralized fee_config.py.
     """
-    calculated = Decimal("0.10") + principal * Decimal("0.0005")
-    return max(Decimal("0.10"), min(Decimal("5.00"), calculated))
+    return _calc_scheme_fee(principal)
 
 
 def _assert_invariants(

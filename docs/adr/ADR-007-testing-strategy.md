@@ -243,7 +243,7 @@ class TestFullPaymentFlow:
         
         # Step 7-9: Resolve proxy (mobile number)
         proxy_response = await self.pdo_client.post(
-            "/proxy/resolve",
+            "/v1/addressing/resolve",
             json={
                 "proxyType": "MOBI",
                 "proxyValue": "+66812345678",

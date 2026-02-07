@@ -68,7 +68,7 @@ def parse_pacs008(xml_content: str) -> dict:
         
         # Define namespace map for ISO 20022
         ns = {
-            'doc': 'urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08',
+            'doc': 'urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13',
             'head': 'urn:iso:std:iso:20022:tech:xsd:head.001.001.02'
         }
         
@@ -89,10 +89,11 @@ def parse_pacs008(xml_content: str) -> dict:
             "uetr": get_text(".//UETR") or get_text(".//doc:UETR"),
             "messageId": get_text(".//MsgId") or get_text(".//doc:MsgId"),
             "endToEndId": get_text(".//EndToEndId") or get_text(".//doc:EndToEndId"),
-            "quoteId": get_text(".//InstrId") or get_text(".//doc:InstrId") or get_text(".//QtId") or get_text(".//doc:QtId") or get_text(".//CtrctId") or get_text(".//doc:CtrctId"),  # FX Quote ID
+            # Quote ID per docs: AgrdRate/QtId is the primary source
+            "quoteId": get_text(".//AgrdRate/QtId") or get_text(".//doc:AgrdRate/doc:QtId") or get_text(".//XchgRateInf/CtrctId") or get_text(".//doc:XchgRateInf/doc:CtrctId") or get_text(".//InstrId") or get_text(".//doc:InstrId"),
             "exchangeRate": get_text(".//PreAgrdXchgRate") or get_text(".//doc:PreAgrdXchgRate") or get_text(".//XchgRate") or get_text(".//doc:XchgRate"),
             "settlementAmount": get_text(".//IntrBkSttlmAmt") or get_text(".//doc:IntrBkSttlmAmt"),
-            "settlementCurrency": get_text(".//IntrBkSttlmAmt/@Ccy") or "SGD",
+            "settlementCurrency": get_text(".//IntrBkSttlmAmt/@Ccy"),
             "instructedAmount": get_text(".//InstdAmt") or get_text(".//doc:InstdAmt"),
             "purposeCode": get_text(".//Purp/Cd") or get_text(".//doc:Purp/doc:Cd"),
             "acceptanceDateTime": get_text(".//AccptncDtTm") or get_text(".//doc:AccptncDtTm"),
@@ -102,10 +103,21 @@ def parse_pacs008(xml_content: str) -> dict:
             "creditorName": get_text(".//Cdtr/Nm") or get_text(".//doc:Cdtr/doc:Nm"),
             "creditorAccount": get_text(".//CdtrAcct/Id/IBAN") or get_text(".//CdtrAcct/Id/Othr/Id") or get_text(".//doc:CdtrAcct/doc:Id/doc:IBAN"),
             "creditorAgentBic": get_text(".//CdtrAgt//BICFI") or get_text(".//doc:CdtrAgt//doc:BICFI"),
-            "instructedCurrency": get_text(".//InstdAmt/@Ccy") or "USD",
+            "instructedCurrency": get_text(".//InstdAmt/@Ccy"),
             "intermediaryAgent1Bic": get_text(".//IntrmyAgt1//BICFI") or get_text(".//doc:IntrmyAgt1//doc:BICFI"),
             "intermediaryAgent2Bic": get_text(".//IntrmyAgt2//BICFI") or get_text(".//doc:IntrmyAgt2//doc:BICFI"),
             "chargeBearer": get_text(".//ChrgBr") or get_text(".//doc:ChrgBr"),
+            # NbOfTxs for validation (must be 1 per Nexus spec)
+            "nbOfTxs": get_text(".//NbOfTxs") or get_text(".//doc:NbOfTxs"),
+            # Settlement and clearing info per documentation
+            "settlementMethod": get_text(".//SttlmInf/SttlmMtd") or get_text(".//doc:SttlmInf/doc:SttlmMtd"),
+            "clearingSystem": get_text(".//SttlmInf/ClrSys/Prtry") or get_text(".//doc:SttlmInf/doc:ClrSys/doc:Prtry") or get_text(".//ClrSys/Cd") or get_text(".//doc:ClrSys/doc:Cd"),
+            # Instruction Priority (NORM or HIGH) per documentation
+            "instructionPriority": get_text(".//InstrPrty") or get_text(".//doc:InstrPrty"),
+            # Charges information per documentation
+            "chargesAmount": get_text(".//ChrgsInf/Amt") or get_text(".//doc:ChrgsInf/doc:Amt"),
+            "chargesCurrency": get_text(".//ChrgsInf/Amt/@Ccy") or get_text(".//doc:ChrgsInf/doc:Amt/@Ccy"),
+            "chargesAgentBic": get_text(".//ChrgsInf/Agt//BICFI") or get_text(".//doc:ChrgsInf/doc:Agt//doc:BICFI"),
             # Remittance Information for NexusOrgnlUETR extraction (return payments)
             "remittanceInfo": get_text(".//AddtlRmtInf") or get_text(".//doc:RmtInf//doc:Ustrd") or get_text(".//RmtInf//Ustrd"),
         }
@@ -128,7 +140,7 @@ def transform_pacs008(xml_content: str, quote_data: dict) -> str:
     """
     try:
         root = etree.fromstring(xml_content.encode())
-        ns = {'doc': 'urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08'}
+        ns = {'doc': 'urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13'}
         
         # Store Source SAP for audit trail
         original_instg_agt_bic = None
@@ -163,19 +175,19 @@ def transform_pacs008(xml_content: str, quote_data: dict) -> str:
             if cdt_trf_tx_inf:
                 prvs_instg_agt1 = root.xpath(".//doc:PrvsInstgAgt1", namespaces=ns)
                 if not prvs_instg_agt1:
-                    new_elem = etree.SubElement(cdt_trf_tx_inf[0], "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08}PrvsInstgAgt1")
-                    fin_instn_id = etree.SubElement(new_elem, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08}FinInstnId")
-                    bicfi = etree.SubElement(fin_instn_id, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08}BICFI")
+                    new_elem = etree.SubElement(cdt_trf_tx_inf[0], "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13}PrvsInstgAgt1")
+                    fin_instn_id = etree.SubElement(new_elem, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13}FinInstnId")
+                    bicfi = etree.SubElement(fin_instn_id, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13}BICFI")
                     bicfi.text = original_instg_agt_bic
         
         # 4b. Previous Instructing Agent Account
         if quote_data.get("fxp_account_id"):
             cdt_trf_tx_inf = root.xpath(".//doc:CdtTrfTxInf", namespaces=ns)
             if cdt_trf_tx_inf:
-                prvs_acct = etree.SubElement(cdt_trf_tx_inf[0], "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08}PrvsInstgAgt1Acct")
-                acct_id = etree.SubElement(prvs_acct, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08}Id")
-                othr = etree.SubElement(acct_id, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08}Othr")
-                othr_id = etree.SubElement(othr, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08}Id")
+                prvs_acct = etree.SubElement(cdt_trf_tx_inf[0], "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13}PrvsInstgAgt1Acct")
+                acct_id = etree.SubElement(prvs_acct, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13}Id")
+                othr = etree.SubElement(acct_id, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13}Othr")
+                othr_id = etree.SubElement(othr, "{urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13}Id")
                 othr_id.text = quote_data["fxp_account_id"]
         
         # 5. Clear IntrmyAgt1
@@ -187,6 +199,39 @@ def transform_pacs008(xml_content: str, quote_data: dict) -> str:
         clr_sys = root.xpath(".//doc:ClrSys//doc:Cd", namespaces=ns)
         if clr_sys and "dest_ips_code" in quote_data:
             clr_sys[0].text = quote_data["dest_ips_code"]
+        
+        # 7. Add ChargesInformation block per Nexus spec (C4 fix)
+        # Reference: https://docs.nexusglobalpayments.org/messaging-and-translation/message-pacs.008-fi-to-fi-customer-credit-transfer#toc159257062
+        # "Source PSP must include the Source PSP Deducted Fee and Destination PSP Deducted Fee in the payment message"
+        cdt_trf_tx_inf = root.xpath(".//doc:CdtTrfTxInf", namespaces=ns)
+        if cdt_trf_tx_inf:
+            pacs008_ns = "urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13"
+            
+            # Add Destination PSP Deducted Fee (if available)
+            if quote_data.get("destination_psp_fee"):
+                chrgs_inf = etree.SubElement(cdt_trf_tx_inf[0], f"{{{pacs008_ns}}}ChrgsInf")
+                amt = etree.SubElement(chrgs_inf, f"{{{pacs008_ns}}}Amt")
+                amt.set("Ccy", quote_data.get("dest_currency", "USD"))
+                amt.text = str(quote_data["destination_psp_fee"])
+                
+                # Agent element - Destination PSP (Creditor Agent)
+                agt = etree.SubElement(chrgs_inf, f"{{{pacs008_ns}}}Agt")
+                fin_instn_id = etree.SubElement(agt, f"{{{pacs008_ns}}}FinInstnId")
+                bicfi = etree.SubElement(fin_instn_id, f"{{{pacs008_ns}}}BICFI")
+                bicfi.text = quote_data.get("dest_psp_bic", "UNKNOWN")
+            
+            # Add Source PSP Deducted Fee (if available)
+            if quote_data.get("source_psp_fee"):
+                chrgs_inf_src = etree.SubElement(cdt_trf_tx_inf[0], f"{{{pacs008_ns}}}ChrgsInf")
+                amt_src = etree.SubElement(chrgs_inf_src, f"{{{pacs008_ns}}}Amt")
+                amt_src.set("Ccy", quote_data.get("source_currency", "USD"))
+                amt_src.text = str(quote_data["source_psp_fee"])
+                
+                # Agent element - Source PSP (Debtor Agent)
+                agt_src = etree.SubElement(chrgs_inf_src, f"{{{pacs008_ns}}}Agt")
+                fin_instn_id_src = etree.SubElement(agt_src, f"{{{pacs008_ns}}}FinInstnId")
+                bicfi_src = etree.SubElement(fin_instn_id_src, f"{{{pacs008_ns}}}BICFI")
+                bicfi_src.text = quote_data.get("source_psp_bic", "UNKNOWN")
             
         return etree.tostring(root, encoding='unicode', pretty_print=True)
     except Exception as e:
@@ -214,6 +259,28 @@ async def validate_pacs008(parsed: dict, db: AsyncSession) -> PaymentValidationR
     # 1. UETR mandatory (sandbox generates if missing)
     if not parsed.get("uetr"):
         warnings.append("UETR was not provided - generated for sandbox demo")
+    
+    # 1b. NbOfTxs validation (Nexus requires single transactions only)
+    # Reference: ISO20022_PARITY_ANALYSIS_REPORT.md - "NbOfTxs must be 1"
+    nb_of_txs = parsed.get("nbOfTxs")
+    if nb_of_txs:
+        try:
+            if int(nb_of_txs) != 1:
+                errors.append(f"NbOfTxs must be 1 for Nexus (received {nb_of_txs}). Batch payments not supported.")
+                status_reason = "CH21"  # Required Element Missing/Invalid
+        except ValueError:
+            errors.append(f"NbOfTxs is not a valid number: {nb_of_txs}")
+            status_reason = "FF01"  # File Format Error
+    
+    # 1c. Instruction Priority validation per documentation
+    # HIGH = 25s timeout (urgent/P2M), NORM = 4 hours (default)
+    # Reference: PAYMENT_FLOW_REVIEW_REPORT.md lines 216-227
+    instruction_priority = parsed.get("instructionPriority")
+    if instruction_priority and instruction_priority not in ("HIGH", "NORM"):
+        warnings.append(f"Unknown instruction priority '{instruction_priority}' - defaulting to NORM")
+    
+    # Store priority for IPS timeout handling (25s for HIGH, 4h for NORM)
+    ips_timeout_ms = 25000 if instruction_priority == "HIGH" else 14400000  # 4 hours
     
     # 2. Quote validation
     quote = None  # Initialize to prevent UnboundLocalError when quote_id is not provided
@@ -267,9 +334,50 @@ async def validate_pacs008(parsed: dict, db: AsyncSession) -> PaymentValidationR
                     errors.append(f"Intermediary Agent 2 mismatch: {parsed['intermediaryAgent2Bic']} not a registered SAP")
                     status_reason = STATUS_INVALID_SAP
     
-    # 3. Charge Bearer must be SHAR
+    # 3. NbOfTxs must be 1 (Nexus supports single payments only)
+    if parsed.get("nbOfTxs") and parsed["nbOfTxs"] != "1":
+        errors.append(f"NbOfTxs must be 1 - Nexus supports single payments only (got {parsed['nbOfTxs']})")
+    
+    # 4. Charge Bearer must be SHAR
     if parsed.get("chargeBearer") and parsed["chargeBearer"] != "SHAR":
         errors.append("Charge Bearer must be SHAR for Nexus payments")
+    
+    # ============================================================================
+    # NEXUS MANDATORY FIELD VALIDATION (per official Nexus documentation)
+    # Reference: https://docs.nexusglobalpayments.org/messaging-and-translation/message-pacs.008-fi-to-fi-customer-credit-transfer
+    # ============================================================================
+    
+    # 4a. Acceptance Date Time (AccptncDtTm) - MANDATORY per Nexus spec
+    # Required for timeout/SLA management (HIGH=25s, NORM=4h)
+    if not parsed.get("acceptanceDateTime"):
+        errors.append("Missing mandatory field: AccptncDtTm (Acceptance Date Time) - required for timeout management")
+        if not status_reason:
+            status_reason = "CH21"  # Required Compulsory Element Missing
+    
+    # 4b. Clearing System (ClrSys) - MANDATORY per Nexus spec
+    # Identifies the IPS operator for routing
+    if not parsed.get("clearingSystem"):
+        errors.append("Missing mandatory field: ClrSys (Clearing System) - required to identify IPS operator")
+        if not status_reason:
+            status_reason = "CH21"
+    
+    # 4c. Debtor Account (DbtrAcct) - MANDATORY per Nexus spec
+    # Required for sanctions screening and regulatory compliance
+    if not parsed.get("debtorAccount"):
+        errors.append("Missing mandatory field: DbtrAcct (Debtor Account) - required for sanctions screening (FATF R16)")
+        if not status_reason:
+            status_reason = "CH21"
+    
+    # 4d. Creditor Account (CdtrAcct) - MANDATORY per Nexus spec
+    # Required for crediting the recipient
+    if not parsed.get("creditorAccount"):
+        errors.append("Missing mandatory field: CdtrAcct (Creditor Account) - required for beneficiary credit")
+        if not status_reason:
+            status_reason = "CH21"
+    
+    # 4e. Settlement Method validation - should be CLRG (Clearing)
+    if parsed.get("settlementMethod") and parsed["settlementMethod"] != "CLRG":
+        warnings.append(f"Settlement Method '{parsed['settlementMethod']}' is not CLRG (Clearing) - verify with destination IPS")
     
     # 4. Amount limits
     if parsed.get("settlementAmount"):
@@ -319,11 +427,23 @@ def build_pacs002_acceptance(
     uetr: str,
     status_code: str,
     settlement_amount: float,
-    settlement_currency: str
+    settlement_currency: str,
+    # Added per ISO20022_PARITY_ANALYSIS_REPORT.md - use original IDs from pacs.008
+    original_instr_id: str | None = None,
+    original_end_to_end_id: str | None = None,
+    original_tx_id: str | None = None,
 ) -> str:
-    """Build pacs.002 Payment Status Report (Acceptance)."""
+    """Build pacs.002 Payment Status Report (Acceptance).
+    
+    Uses original IDs from pacs.008 if provided, falls back to UETR per sandbox default.
+    """
     now = datetime.now(timezone.utc).isoformat()
     msg_id = f"MSG{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+    
+    # Use original IDs from pacs.008 if available, else fallback to UETR
+    instr_id = original_instr_id or uetr
+    e2e_id = original_end_to_end_id or uetr
+    tx_id = original_tx_id or uetr
     
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.002.001.15">
@@ -333,9 +453,10 @@ def build_pacs002_acceptance(
       <CreDtTm>{now}</CreDtTm>
     </GrpHdr>
     <TxInfAndSts>
-      <OrgnlInstrId>{uetr}</OrgnlInstrId>
-      <OrgnlEndToEndId>{uetr}</OrgnlEndToEndId>
-      <OrgnlTxId>{uetr}</OrgnlTxId>
+      <OrgnlInstrId>{instr_id}</OrgnlInstrId>
+      <OrgnlEndToEndId>{e2e_id}</OrgnlEndToEndId>
+      <OrgnlTxId>{tx_id}</OrgnlTxId>
+      <OrgnlUETR>{uetr}</OrgnlUETR>
       <TxSts>{status_code}</TxSts>
       <StsRsnInf>
         <Rsn><Cd>AC01</Cd></Rsn>
@@ -353,11 +474,22 @@ def build_pacs002_rejection(
     uetr: str,
     status_code: str,
     reason_code: str,
-    reason_description: str
+    reason_description: str,
+    # Added per ISO20022_PARITY_ANALYSIS_REPORT.md
+    original_instr_id: str | None = None,
+    original_end_to_end_id: str | None = None,
+    original_tx_id: str | None = None,
 ) -> str:
-    """Build pacs.002 Payment Status Report (Rejection)."""
+    """Build pacs.002 Payment Status Report (Rejection).
+    
+    Uses original IDs from pacs.008 if provided, falls back to UETR per sandbox default.
+    """
     now = datetime.now(timezone.utc).isoformat()
     msg_id = f"MSG{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+    
+    instr_id = original_instr_id or uetr
+    e2e_id = original_end_to_end_id or uetr
+    tx_id = original_tx_id or uetr
     
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.002.001.15">
@@ -367,9 +499,10 @@ def build_pacs002_rejection(
       <CreDtTm>{now}</CreDtTm>
     </GrpHdr>
     <TxInfAndSts>
-      <OrgnlInstrId>{uetr}</OrgnlInstrId>
-      <OrgnlEndToEndId>{uetr}</OrgnlEndToEndId>
-      <OrgnlTxId>{uetr}</OrgnlTxId>
+      <OrgnlInstrId>{instr_id}</OrgnlInstrId>
+      <OrgnlEndToEndId>{e2e_id}</OrgnlEndToEndId>
+      <OrgnlTxId>{tx_id}</OrgnlTxId>
+      <OrgnlUETR>{uetr}</OrgnlUETR>
       <TxSts>{status_code}</TxSts>
       <StsRsnInf>
         <Rsn><Cd>{reason_code}</Cd></Rsn>
@@ -393,7 +526,7 @@ def build_camt054(
     msg_id = f"CAMT054-{uetr[:8]}-{int(datetime.now(timezone.utc).timestamp())}"
     
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.054.001.13">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.054.001.11">
   <BkToCstmrDbtCdtNtfctn>
     <GrpHdr>
       <MsgId>{msg_id}</MsgId>
@@ -424,6 +557,12 @@ def build_camt054(
             </Fmly>
           </Domn>
         </BkTxCd>
+        <NtryDt>
+          <Dt>{now[:10]}</Dt>
+        </NtryDt>
+        <BookgDt>
+          <Dt>{now[:10]}</Dt>
+        </BookgDt>
         <NtryDtls>
           <TxDtls>
             <Refs>
@@ -667,7 +806,7 @@ async def process_pacs008(
         destination_currency=parsed.get("instructedCurrency", "XXX"),
         source_amount=parsed.get("settlementAmount"),
         exchange_rate=parsed.get("exchangeRate"),
-        status="ACSP"
+        status="ACSC"
     )
     
     # Check for NexusOrgnlUETR
@@ -738,7 +877,7 @@ async def process_pacs008(
     
     return Pacs008Response(
         uetr=validation.uetr,
-        status="ACSP",
+        status="ACSC",
         statusReasonCode=None,
         message="Payment instruction accepted, transformed and forwarded to destination IPS",
         callbackEndpoint=pacs002_endpoint,

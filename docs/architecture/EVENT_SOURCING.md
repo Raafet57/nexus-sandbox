@@ -2,6 +2,14 @@
 
 > This document defines the event-sourcing and CQRS patterns for the Nexus Global Payments platform, ensuring immutable audit trails and temporal query capabilities.
 
+> [!NOTE]
+> **Sandbox vs Production**: This document describes the **target event-sourcing architecture** in Go/Kafka. The sandbox uses a simplified implementation:
+> - **Event Storage**: PostgreSQL `payment_events` table (vs Kafka in production)
+> - **Language**: Python/FastAPI (vs Go in production)
+> - **Projections**: Direct database updates (vs separate read models)
+>
+> The sandbox demonstrates the *concepts* of event-driven payment tracking. See the actual implementation in `services/nexus-gateway/src/api/payments.py`.
+
 ## Why Event Sourcing for Payments?
 
 | Requirement | Solution |

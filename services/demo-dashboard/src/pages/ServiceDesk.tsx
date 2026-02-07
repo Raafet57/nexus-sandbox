@@ -88,8 +88,8 @@ const INITIAL_DISPUTES: DisputeCase[] = [
         description: "Amount received was 100 THB less than expected",
         amount: "1000.00",
         currency: "SGD",
-        submittedBy: "DBSGSGSG",
-        assignedTo: "BKKBTHBK",
+        submittedBy: "DBSSSGSG",
+        assignedTo: "KASITHBK",
         status: "UNDER_REVIEW",
         createdAt: "2026-02-03T10:00:00Z",
         lastUpdated: "2026-02-03T12:30:00Z",
@@ -104,8 +104,8 @@ const INITIAL_RECALLS: RecallRequest[] = [
         description: "Suspected fraudulent transaction - customer did not authorize",
         amount: "5000.00",
         currency: "SGD",
-        requesterPsp: "DBSGSGSG",
-        destinationPsp: "BKKBTHBK",
+        requesterPsp: "DBSSSGSG",
+        destinationPsp: "KASITHBK",
         status: "PENDING",
         createdAt: "2026-02-03T09:00:00Z",
         slaDeadline: "2026-02-04T09:00:00Z",
@@ -155,7 +155,7 @@ export function ServiceDesk() {
             description: "",
             amount: "",
             currency: "SGD",
-            submittedBy: "DBSGSGSG",
+            submittedBy: "DBSSSGSG",
             assignedTo: "",
         },
     });
@@ -168,7 +168,7 @@ export function ServiceDesk() {
             description: "",
             amount: "",
             currency: "SGD",
-            requesterPsp: "DBSGSGSG",
+            requesterPsp: "DBSSSGSG",
             destinationPsp: "",
         },
     });
@@ -632,9 +632,9 @@ export function ServiceDesk() {
                         <Select
                             label="Assign To (Counterparty PSP)"
                             data={[
-                                { value: "DBSGSGSG", label: "DBS Bank Singapore" },
-                                { value: "BKKBTHBK", label: "Bangkok Bank" },
-                                { value: "MAYBMYKL", label: "Maybank Malaysia" },
+                                { value: "DBSSSGSG", label: "DBS Bank Singapore" },
+                                { value: "KASITHBK", label: "Kasikorn Bank" },
+                                { value: "MABORKKL", label: "Maybank Malaysia" },
                             ]}
                             required
                             {...disputeForm.getInputProps("assignedTo")}
@@ -692,9 +692,9 @@ export function ServiceDesk() {
                         <Select
                             label="Destination PSP"
                             data={[
-                                { value: "DBSGSGSG", label: "DBS Bank Singapore" },
-                                { value: "BKKBTHBK", label: "Bangkok Bank" },
-                                { value: "MAYBMYKL", label: "Maybank Malaysia" },
+                                { value: "DBSSSGSG", label: "DBS Bank Singapore" },
+                                { value: "KASITHBK", label: "Kasikorn Bank" },
+                                { value: "MABORKKL", label: "Maybank Malaysia" },
                             ]}
                             required
                             {...recallForm.getInputProps("destinationPsp")}

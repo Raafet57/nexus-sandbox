@@ -13,12 +13,10 @@ import {
     TextInput,
     Badge,
     Table,
-    Timeline,
     Box,
     Alert,
     Tabs,
-    Accordion,
-    Progress,
+
     NumberInput,
     Anchor,
     Breadcrumbs,
@@ -27,6 +25,9 @@ import {
     Code,
     ActionIcon,
     CopyButton,
+    Checkbox,
+    Tooltip,
+    Divider,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -46,8 +47,9 @@ import {
     IconCode,
     IconTransform,
     IconCopy,
+    IconShieldCheck,
 } from "@tabler/icons-react";
-import type { Country, Quote, FeeBreakdown, LifecycleStep, ProxyResolutionResult, IntermediaryAgentsResponse } from "../types";
+import type { Country, Quote, FeeBreakdown, ProxyResolutionResult, IntermediaryAgentsResponse } from "../types";
 import {
     getCountries,
     getQuotes,
@@ -55,38 +57,14 @@ import {
     resolveProxy,
     getPreTransactionDisclosure,
     parseQRCode,
-    getIntermediaryAgents,
     submitPacs008
 } from "../services/api";
+import { usePaymentLifecycle } from "../hooks/payment";
+import type { LifecycleStep } from "../hooks/payment";
+import { FeeCard, LifecycleAccordion } from "../components/payment";
 
-// 17-Step Lifecycle Definition
-const LIFECYCLE_STEPS: Omit<LifecycleStep, "status" | "timestamp" | "details">[] = [
-    { id: 1, phase: 1, name: "Select Country", apiCall: "GET /countries", isoMessage: "-" },
-    { id: 2, phase: 1, name: "Define Amount", apiCall: "Validation", isoMessage: "-" },
-    { id: 3, phase: 2, name: "Request FX Quotes", apiCall: "GET /quotes", isoMessage: "-" },
-    { id: 4, phase: 2, name: "Generate Quotes", apiCall: "FXP Aggregation", isoMessage: "-" },
-    { id: 5, phase: 2, name: "Select Quote", apiCall: "User Selection", isoMessage: "-" },
-    { id: 6, phase: 2, name: "Display PTD", apiCall: "GET /fee-formulas/ptd", isoMessage: "-" },
-    { id: 7, phase: 3, name: "Generate Address Form", apiCall: "GET /address-types", isoMessage: "-" },
-    { id: 8, phase: 3, name: "Proxy Resolution", apiCall: "POST /iso20022/acmt023", isoMessage: "acmt.023" },
-    { id: 9, phase: 3, name: "Confirmation of Payee", apiCall: "Response Processing", isoMessage: "acmt.024" },
-    { id: 10, phase: 3, name: "Review Screening Data", apiCall: "Name Verification", isoMessage: "-" },
-    { id: 11, phase: 3, name: "Sanctions Screening", apiCall: "AML/CFT Check", isoMessage: "-" },
-    { id: 12, phase: 3, name: "Sender Authorization", apiCall: "User Consent", isoMessage: "-" },
-    { id: 13, phase: 4, name: "Get Intermediaries", apiCall: "GET /intermediary-agents", isoMessage: "-" },
-    { id: 14, phase: 4, name: "Construct pacs.008", apiCall: "Message Build", isoMessage: "pacs.008" },
-    { id: 15, phase: 4, name: "Submit to IPS", apiCall: "POST /iso20022/pacs008", isoMessage: "pacs.008" },
-    { id: 16, phase: 4, name: "Settlement Chain", apiCall: "Nexus → Dest IPS → SAP", isoMessage: "-" },
-    { id: 17, phase: 5, name: "Accept & Notify", apiCall: "Response Processing", isoMessage: "pacs.002" },
-];
-
-const PHASE_NAMES = {
-    1: "Payment Setup",
-    2: "Quoting",
-    3: "Addressing & Compliance",
-    4: "Processing & Settlement",
-    5: "Completion",
-};
+// 17-Step Lifecycle now managed by usePaymentLifecycle hook
+// FeeCard and LifecycleAccordion extracted to components/payment/
 
 export function PaymentPage() {
     const [searchParams] = useSearchParams();
@@ -100,6 +78,26 @@ export function PaymentPage() {
     const [selectedProxyType, setSelectedProxyType] = useState<string | null>(null);
     const [recipientData, setRecipientData] = useState<Record<string, string>>({});
     const [uetr, _setUetr] = useState<string>(crypto.randomUUID());
+    // Nexus spec compliance: Instruction Priority (HIGH=25s, NORM=4hr)
+    const [instructionPriority, setInstructionPriority] = useState<"HIGH" | "NORM">("NORM");
+    // Step 12: Payment Reference (sender message to recipient)
+    const [paymentReference, setPaymentReference] = useState<string>("");
+    // Confirmation of Payee
+    const [recipientConfirmed, setRecipientConfirmed] = useState<boolean>(false);
+    // Step 10-11: Sanctions Screening Data (FATF R16)
+    const [sanctionsData, setSanctionsData] = useState<{
+        recipientAddress: string;
+        recipientDateOfBirth: string;
+        recipientNationalId: string;
+    }>({
+        recipientAddress: "",
+        recipientDateOfBirth: "",
+        recipientNationalId: "",
+    });
+
+
+    // Step 7: Fee Type (INVOICED/DEDUCTED) - Phase 2 implementation
+    const [sourceFeeType, setSourceFeeType] = useState<"INVOICED" | "DEDUCTED">("INVOICED");
 
     // Data state
     const [countries, setCountries] = useState<Country[]>([]);
@@ -151,10 +149,9 @@ export function PaymentPage() {
 
 
 
-    // Lifecycle state
-    const [steps, setSteps] = useState<LifecycleStep[]>(
-        LIFECYCLE_STEPS.map((s) => ({ ...s, status: "pending" as const }))
-    );
+
+    // Lifecycle state - using extracted hook
+    const { stepsByPhase, advanceStep, setSteps } = usePaymentLifecycle();
 
     // Loading states
     const [loading, setLoading] = useState({ countries: false, resolve: false, submit: false, qrScan: false });
@@ -237,6 +234,33 @@ export function PaymentPage() {
                                 amountType
                             );
                             setQuotes(data.quotes);
+                            
+                            // NEXUS SPEC COMPLIANCE: PSP auto-selects best quote
+                            // Per docs: "The PSP does not need to show the list of quotes to the Sender"
+                            // Auto-select the quote with best rate (highest when sending, lowest when receiving)
+                            if (data.quotes && data.quotes.length > 0) {
+                                const sortedQuotes = [...data.quotes].sort((a, b) => {
+                                    if (amountType === "SOURCE") {
+                                        // When sending fixed amount, maximize recipient amount
+                                        return Number(b.creditorAccountAmount || 0) - Number(a.creditorAccountAmount || 0);
+                                    } else {
+                                        // When receiving fixed amount, minimize sender cost
+                                        return Number(a.sourceInterbankAmount || 0) - Number(b.sourceInterbankAmount || 0);
+                                    }
+                                });
+                                
+                                // Auto-select the best quote (PSP selection, not user selection)
+                                const bestQuote = sortedQuotes[0];
+                                setSelectedQuote(bestQuote);
+                                
+                                // Fetch fee breakdown for selected quote
+                                try {
+                                    const fees = await getPreTransactionDisclosure(bestQuote.quoteId, sourceFeeType);
+                                    setFeeBreakdown(fees);
+                                } catch {
+                                    // Fee fetch failed, continue without breakdown
+                                }
+                            }
                         }
                     } catch {
                         // No fallback - quotes come from FXP via backend
@@ -318,15 +342,7 @@ export function PaymentPage() {
         setIntermediaries(null);
     }, [selectedCountry, amount]);
 
-    const advanceStep = (stepId: number) => {
-        setSteps((prev) =>
-            prev.map((s) => ({
-                ...s,
-                status: s.id < stepId ? "completed" : s.id === stepId ? "active" : "pending",
-                timestamp: s.id === stepId ? new Date().toLocaleTimeString() : s.timestamp,
-            }))
-        );
-    };
+    // advanceStep is now provided by usePaymentLifecycle hook
 
     const handleResolve = async () => {
         const typeData = proxyTypes.find(t => t.value === selectedProxyType);
@@ -346,7 +362,12 @@ export function PaymentPage() {
             // Join multi-field labels if necessary, or pass the primary identifier
             // For sandbox, we use the first field as the main "proxy value"
             const primaryValue = recipientData[requiredFields[0]];
-            const result = await resolveProxy(selectedCountry, selectedProxyType, primaryValue, recipientData);
+            const result = await resolveProxy({
+                destinationCountry: selectedCountry,
+                proxyType: selectedProxyType,
+                proxyValue: primaryValue,
+                structuredData: recipientData
+            });
             setResolution({ ...result, verified: true });
             advanceStep(10);
             notifications.show({
@@ -365,13 +386,31 @@ export function PaymentPage() {
                 }))
             );
 
-            // ISO 20022 Error Code mapping
+            // ISO 20022 Error Code mapping (all 12 codes)
             const errorCodeDescriptions: Record<string, string> = {
+                // Account/Proxy Errors
                 'BE23': 'Account/Proxy Invalid - Not registered in destination country PDO',
-                'AC04': 'Account Closed - Recipient account has been closed',
                 'AC01': 'Incorrect Account Number - Invalid format',
-                'RR04': 'Regulatory Block - AML/CFT screening failed',
+                'AC04': 'Account Closed - Recipient account has been closed',
+                'AC06': 'Account Inactive - Recipient account is dormant',
+                'AB08': 'Creditor Agent Unavailable - Destination PSP offline',
+
+                // Transaction Errors
+                'AB04': 'Quote Expired - Exchange rate no longer valid (quote valid for 10 minutes)',
+                'AM04': 'Insufficient Funds - FXP or SAP lacks liquidity for this transaction',
+                'AM02': 'Amount Limit Exceeded - Transaction exceeds maximum allowed amount',
+
+                // Regulatory/Compliance Errors
+                'RR04': 'Regulatory Block - AML/CFT sanctions screening failed',
+
+                // Agent Errors
                 'AGNT': 'Incorrect Agent - PSP not onboarded to Nexus',
+                'RC01': 'Intermediary Agent Missing - Required routing agent not found',
+
+                // General Errors
+                'DUPL': 'Duplicate Payment - A payment with this UETR already exists',
+                'FF01': 'Format Error - Message does not conform to XSD schema',
+                'CH21': 'Mandatory Element Missing - Required field is missing or invalid',
             };
 
             const statusCode = e.statusReasonCode || 'UNKNOWN';
@@ -459,26 +498,21 @@ export function PaymentPage() {
         }
     };
 
-    const handleQuoteSelect = async (quote: Quote) => {
-        setSelectedQuote(quote);
-        try {
-            // Step 6: PTD
-            const data = await getPreTransactionDisclosure(quote.quoteId);
-            setFeeBreakdown(data);
-            advanceStep(6);
 
-            // Step 13: Intermediary Agents
-            const interData = await getIntermediaryAgents(quote.quoteId);
-            setIntermediaries(interData);
-            advanceStep(13);
-        } catch {
-            notifications.show({ title: "Error", message: "Failed to fetch required payment data", color: "red" });
-        }
-    };
 
     const handleSubmit = async () => {
         if (!selectedQuote) {
             notifications.show({ title: "Error", message: "Please select a quote first", color: "red" });
+            return;
+        }
+
+        // Nexus spec compliance: Explicit Confirmation of Payee required
+        if (!recipientConfirmed) {
+            notifications.show({ 
+                title: "Confirmation Required", 
+                message: "Please confirm the recipient name before sending", 
+                color: "yellow" 
+            });
             return;
         }
 
@@ -491,6 +525,16 @@ export function PaymentPage() {
             // Step 15: Submit to IPS
             advanceStep(15);
 
+            // Determine clearing system codes based on source country
+            const clearingSystemCodes: Record<string, string> = {
+                'SG': 'SGFAST',
+                'TH': 'THBRT',
+                'MY': 'MYDUIT',
+                'PH': 'PHINST',
+                'ID': 'IDQRIS',
+                'IN': 'INUPI'
+            };
+
             const params = {
                 uetr,
                 quoteId: selectedQuote.quoteId,
@@ -501,10 +545,17 @@ export function PaymentPage() {
                 exchangeRate: Number(selectedQuote.exchangeRate),
                 debtorName: "Demo Sender",
                 debtorAccount: "DEMO-SENDER-ACCT",
-                debtorAgentBic: "DBSGSGSG", // Default source agent
+                debtorAgentBic: "DBSSSGSG", // Default source agent
                 creditorName: resolution?.beneficiaryName || "Demo Recipient",
                 creditorAccount: resolution?.accountNumber || "DEMO-RECIPIENT-ACCT",
                 creditorAgentBic: resolution?.agentBic || "MOCKTHBK",
+                // Nexus spec mandatory fields
+                acceptanceDateTime: new Date().toISOString(),
+                instructionPriority,
+                clearingSystemCode: clearingSystemCodes[sourceCountry || "SG"],
+                intermediaryAgent1Bic: intermediaries?.intermediaryAgent1?.bic,
+                intermediaryAgent2Bic: intermediaries?.intermediaryAgent2?.bic,
+                paymentReference: paymentReference || undefined,
                 scenarioCode: demoCode || undefined
             };
 
@@ -524,10 +575,11 @@ export function PaymentPage() {
                 color: "green",
                 icon: <IconCheck size={16} />
             });
-        } catch (err: any) {
+        } catch (err) {
             // Handle rejection (unhappy flows)
-            const statusCode = err.statusReasonCode || 'RJCT';
-            const description = err.errors?.[0] || err.detail || 'Payment failed';
+            const error = err as Error & { statusReasonCode?: string; errors?: string[]; detail?: string };
+            const statusCode = error.statusReasonCode || 'RJCT';
+            const description = error.errors?.[0] || error.detail || 'Payment failed';
 
             // Mark step 15 as error
             setSteps(prev => prev.map(s => ({
@@ -565,12 +617,7 @@ export function PaymentPage() {
         }
     };
 
-    // Group steps by phase
-    const stepsByPhase = Object.entries(PHASE_NAMES).map(([phase, name]) => ({
-        phase: Number(phase),
-        name,
-        steps: steps.filter((s) => s.phase === Number(phase)),
-    }));
+    // stepsByPhase is now provided by usePaymentLifecycle hook
 
     const selectedCountryData = countries.find((c) => c.countryCode === selectedCountry);
 
@@ -636,11 +683,48 @@ export function PaymentPage() {
                                     value={Number(amount)}
                                     onChange={(val) => setAmount(val)}
                                     min={1}
+                                    max={amountType === "SOURCE" 
+                                        ? Number(countries.find(c => c.countryCode === sourceCountry)?.currencies?.[0]?.maxAmount || 999999999) 
+                                        : Number(selectedCountryData?.currencies?.[0]?.maxAmount || 999999999)}
                                     thousandSeparator=","
                                     description={amountType === "SOURCE"
-                                        ? "System will calculate how much recipient receives"
-                                        : "System will calculate how much to debit from your account"}
+                                        ? `System will calculate how much recipient receives. Maximum: ${countries.find(c => c.countryCode === sourceCountry)?.currencies?.[0]?.maxAmount?.toLocaleString() || "N/A"} ${countries.find(c => c.countryCode === sourceCountry)?.currencies?.[0]?.currencyCode || ""}`
+                                        : `System will calculate how much to debit from your account. Maximum: ${selectedCountryData?.currencies?.[0]?.maxAmount?.toLocaleString() || "N/A"} ${selectedCountryData?.currencies?.[0]?.currencyCode || ""}`}
                                 />
+                                
+                                {/* NEXUS SPEC COMPLIANCE: Instruction Priority Selection */}
+                                <Stack gap="xs">
+                                    <Group justify="space-between">
+                                        <Text size="sm" fw={500}>Instruction Priority</Text>
+                                        <Tooltip 
+                                            label={
+                                                <Stack gap={4} p="xs">
+                                                    <Text size="xs" fw={500}>HIGH: 25 second timeout</Text>
+                                                    <Text size="xs" fw={500}>NORMAL: 4 hour timeout</Text>
+                                                    <Text size="xs" c="dimmed">Per Nexus ISO 20022 spec</Text>
+                                                </Stack>
+                                            }
+                                            multiline
+                                            w={250}
+                                        >
+                                            <IconInfoCircle size={16} color="var(--mantine-color-dimmed)" />
+                                        </Tooltip>
+                                    </Group>
+                                    <SegmentedControl
+                                        value={instructionPriority}
+                                        onChange={(val) => setInstructionPriority(val as "HIGH" | "NORM")}
+                                        data={[
+                                            { value: "NORM", label: "Normal (4hr)" },
+                                            { value: "HIGH", label: "High (25s)" },
+                                        ]}
+                                        size="sm"
+                                    />
+                                    <Text size="xs" c="dimmed">
+                                        {instructionPriority === "HIGH" 
+                                            ? "Payment must complete within 25 seconds or be rejected" 
+                                            : "Payment has up to 4 hours to complete"}
+                                    </Text>
+                                </Stack>
                             </Stack>
                         </Card>
 
@@ -738,13 +822,98 @@ export function PaymentPage() {
 
 
                                 {resolution && resolution.verified && (
-                                    <Alert color="green" title="Recipient Verified" icon={<IconCheck size={16} />} p="xs">
-                                        <Stack gap={4}>
-                                            <Text size="xs" fw={700}>Name: {resolution.beneficiaryName || resolution.accountName}</Text>
-                                            <Text size="xs">A/C: {resolution.accountNumber}</Text>
-                                            <Text size="xs">Bank/BIC: {resolution.agentBic || resolution.bankName}</Text>
-                                        </Stack>
-                                    </Alert>
+                                    <>
+                                        <Alert color="green" title="Recipient Verified" icon={<IconCheck size={16} />} p="xs">
+                                            <Stack gap={4}>
+                                                <Text size="xs" fw={700}>Name: {resolution.beneficiaryName || resolution.accountName}</Text>
+                                                <Text size="xs">A/C: {resolution.accountNumber}</Text>
+                                                <Text size="xs">Bank/BIC: {resolution.agentBic || resolution.bankName}</Text>
+                                            </Stack>
+                                        </Alert>
+                                        
+                                        {/* FATF R16: Sanctions Screening Data Collection (Step 10-11) */}
+                                        <Card withBorder p="sm" bg="var(--mantine-color-dark-7)">
+                                            <Group gap="xs" mb="xs">
+                                                <IconShieldCheck size={16} color="var(--mantine-color-blue-filled)" />
+                                                <Text size="sm" fw={500}>Sanctions Screening (FATF R16)</Text>
+                                                <Tooltip 
+                                                    label={
+                                                        <Stack gap={4} p="xs">
+                                                            <Text size="xs">Per FATF Recommendation 16, we require:</Text>
+                                                            <Text size="xs">• Recipient Name (from verification)</Text>
+                                                            <Text size="xs">• Recipient Account Number</Text>
+                                                            <Text size="xs">• PLUS one of: Address, Date of Birth, or National ID</Text>
+                                                        </Stack>
+                                                    }
+                                                    multiline
+                                                    w={300}
+                                                >
+                                                    <IconInfoCircle size={14} color="var(--mantine-color-dimmed)" />
+                                                </Tooltip>
+                                            </Group>
+                                            <Divider mb="xs" />
+                                            <Stack gap="xs">
+                                                <TextInput
+                                                    label="Recipient Address"
+                                                    placeholder="Street address, city, country"
+                                                    value={sanctionsData.recipientAddress}
+                                                    onChange={(e) => {
+                                                        setSanctionsData(prev => ({ ...prev, recipientAddress: e.target.value }));
+                                                        advanceStep(10); // Sanctions check step
+                                                    }}
+                                                    description="Required if DOB and National ID not provided"
+                                                />
+                                                <Group grow>
+                                                    <TextInput
+                                                        label="Date of Birth"
+                                                        placeholder="YYYY-MM-DD"
+                                                        value={sanctionsData.recipientDateOfBirth}
+                                                        onChange={(e) => {
+                                                            setSanctionsData(prev => ({ ...prev, recipientDateOfBirth: e.target.value }));
+                                                            advanceStep(10);
+                                                        }}
+                                                        description="Optional"
+                                                    />
+                                                    <TextInput
+                                                        label="National ID"
+                                                        placeholder="Passport/NRIC/etc"
+                                                        value={sanctionsData.recipientNationalId}
+                                                        onChange={(e) => {
+                                                            setSanctionsData(prev => ({ ...prev, recipientNationalId: e.target.value }));
+                                                            advanceStep(10);
+                                                        }}
+                                                        description="Optional"
+                                                    />
+                                                </Group>
+                                                {(sanctionsData.recipientAddress || sanctionsData.recipientDateOfBirth || sanctionsData.recipientNationalId) && (
+                                                    <Alert color="green" variant="light" p="xs" mt="xs">
+                                                        <Group gap="xs">
+                                                            <IconCheck size={14} />
+                                                            <Text size="xs">FATF R16 requirement satisfied</Text>
+                                                        </Group>
+                                                    </Alert>
+                                                )}
+                                            </Stack>
+                                        </Card>
+                                        
+                                        {/* NEXUS SPEC COMPLIANCE: Explicit Confirmation of Payee (Step 11) */}
+                                        <Card withBorder p="xs" bg="var(--mantine-color-dark-7)">
+                                            <Checkbox
+                                                label={
+                                                    <Stack gap={0}>
+                                                        <Text size="sm" fw={500}>I confirm this is the intended recipient</Text>
+                                                        <Text size="xs" c="dimmed">
+                                                            You are sending to: <strong>{resolution.beneficiaryName || resolution.accountName}</strong>
+                                                        </Text>
+                                                    </Stack>
+                                                }
+                                                checked={recipientConfirmed}
+                                                onChange={(e) => setRecipientConfirmed(e.currentTarget.checked)}
+                                                color="green"
+                                                required
+                                            />
+                                        </Card>
+                                    </>
                                 )}
 
                                 {resolution && !resolution.verified && (
@@ -756,11 +925,22 @@ export function PaymentPage() {
                                         </Stack>
                                     </Alert>
                                 )}
+                                {/* Payment Reference (Step 12) */}
+                                <TextInput
+                                    label="Payment Reference (Optional)"
+                                    placeholder="Enter a message for the recipient (max 140 characters)"
+                                    value={paymentReference}
+                                    onChange={(e) => setPaymentReference(e.currentTarget.value.slice(0, 140))}
+                                    maxLength={140}
+                                    description="This message will appear on the recipient's statement"
+                                    leftSection={<IconReceipt size={16} />}
+                                />
+                                
                                 <Button
                                     fullWidth
                                     leftSection={<IconSend size={16} />}
                                     loading={loading.submit}
-                                    disabled={!selectedQuote || !resolution || !resolution.verified}
+                                    disabled={!selectedQuote || !resolution || !resolution.verified || !recipientConfirmed}
                                     onClick={handleSubmit}
                                 >
                                     Confirm & Send
@@ -783,72 +963,49 @@ export function PaymentPage() {
 
                         <Tabs.Panel value="quotes">
                             <Stack gap="md">
-                                {quotes.length > 0 ? (
-                                    quotes.map((quote) => (
-                                        <Card
-                                            key={quote.quoteId}
-                                            withBorder
-                                            radius="md"
-                                            p="md"
-                                            onClick={() => handleQuoteSelect(quote)}
-                                            style={{
-                                                cursor: "pointer",
-                                                borderColor: selectedQuote?.quoteId === quote.quoteId
-                                                    ? "var(--mantine-color-blue-filled)"
-                                                    : undefined,
-                                                backgroundColor: selectedQuote?.quoteId === quote.quoteId
-                                                    ? "var(--mantine-color-blue-light)"
-                                                    : undefined
-                                            }}
-                                        >
+                                {selectedQuote ? (
+                                    // NEXUS SPEC COMPLIANCE: Show auto-selected quote (PSP selected, not user selected)
+                                    // Per docs: "The PSP does not need to show the list of quotes to the Sender"
+                                    <Card withBorder radius="md" p="md" style={{ borderColor: "var(--mantine-color-green-filled)" }}>
+                                        <Stack gap="xs">
                                             <Group justify="space-between" align="flex-start">
                                                 <Box>
-                                                    {/* Show net to recipient when available */}
-                                                    {quote.creditorAccountAmount ? (
+                                                    <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+                                                        Selected Quote (Best Rate)
+                                                    </Text>
+                                                    {selectedQuote.creditorAccountAmount ? (
                                                         <>
-                                                            <Text fw={700} size="lg" c="green">
-                                                                {selectedCountryData?.currencies[0]?.currencyCode} {Number(quote.creditorAccountAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                            <Text fw={700} size="xl" c="green">
+                                                                {selectedCountryData?.currencies[0]?.currencyCode} {Number(selectedQuote.creditorAccountAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                             </Text>
-                                                            <Text size="xs" c="dimmed">
-                                                                Net to recipient (after {quote.destinationPspFee ? `${selectedCountryData?.currencies[0]?.currencyCode} ${Number(quote.destinationPspFee).toLocaleString()} fee` : 'D-PSP fee'})
+                                                            <Text size="sm" c="dimmed">
+                                                                Net to recipient after fees
                                                             </Text>
                                                         </>
                                                     ) : (
-                                                        <Text fw={700} size="lg">
-                                                            {selectedCountryData?.currencies[0]?.currencyCode} {quote.destinationInterbankAmount}
+                                                        <Text fw={700} size="xl">
+                                                            {selectedCountryData?.currencies[0]?.currencyCode} {selectedQuote.destinationInterbankAmount}
                                                         </Text>
                                                     )}
-                                                    <Text size="xs" c="dimmed" mt={4}>
-                                                        via {quote.fxpName} • Rate: {Number(quote.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                                                    </Text>
                                                 </Box>
                                                 <Stack gap={2} align="flex-end">
-                                                    <Badge size="xs" color="blue">
-                                                        Quote Lock
+                                                    <Badge size="sm" color="green" variant="filled">
+                                                        Best Rate Selected
                                                     </Badge>
                                                     {(() => {
-                                                        const expiresAt = new Date(quote.expiresAt).getTime();
+                                                        const expiresAt = new Date(selectedQuote.expiresAt).getTime();
                                                         const remainingSecs = Math.max(0, Math.floor((expiresAt - now) / 1000));
-                                                        const totalSecs = 600; // 10 minutes total
-                                                        const progressPct = (remainingSecs / totalSecs) * 100;
                                                         const isWarning = remainingSecs <= 60;
                                                         const isCritical = remainingSecs <= 30;
 
                                                         return (
                                                             <>
-                                                                <Progress
-                                                                    value={progressPct}
-                                                                    size="xs"
-                                                                    w={60}
-                                                                    color={isCritical ? "red" : isWarning ? "orange" : "blue"}
-                                                                    radius="xl"
-                                                                />
                                                                 <Text
                                                                     size="xs"
                                                                     c={isCritical ? "red" : isWarning ? "orange" : "dimmed"}
                                                                     fw={isWarning ? 600 : 400}
                                                                 >
-                                                                    {remainingSecs > 60
+                                                                    Expires in: {remainingSecs > 60
                                                                         ? `${Math.floor(remainingSecs / 60)}m ${remainingSecs % 60}s`
                                                                         : `${remainingSecs}s`}
                                                                     {isCritical && " ⚠️"}
@@ -858,14 +1015,73 @@ export function PaymentPage() {
                                                     })()}
                                                 </Stack>
                                             </Group>
-                                        </Card>
-                                    ))
+                                            
+                                            <Divider />
+                                            
+                                            <Group justify="space-between">
+                                                <Stack gap={0}>
+                                                    <Text size="xs" c="dimmed">FX Provider</Text>
+                                                    <Text size="sm" fw={500}>{selectedQuote.fxpName}</Text>
+                                                </Stack>
+                                                <Stack gap={0} align="flex-end">
+                                                    <Text size="xs" c="dimmed">Exchange Rate</Text>
+                                                    <Text size="sm" fw={500}>1 {selectedQuote.sourceCurrency} = {Number(selectedQuote.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 4 })} {selectedCountryData?.currencies[0]?.currencyCode}</Text>
+                                                </Stack>
+                                            </Group>
+                                            
+                                            {quotes.length > 1 && (
+                                                <Text size="xs" c="dimmed" ta="center" mt="xs">
+                                                    {quotes.length} quotes compared • Best rate auto-selected by PSP
+                                                </Text>
+                                            )}
+                                        </Stack>
+                                    </Card>
+                                ) : quotes.length > 0 ? (
+                                    <Alert icon={<IconAlertCircle size={16} />} title="Quote Selection" color="blue">
+                                        Selecting best quote from {quotes.length} FX providers...
+                                    </Alert>
                                 ) : (
                                     <Alert icon={<IconAlertCircle size={16} />} title="Quoting" color="blue">
                                         Select a destination country to retrieve live multi-provider quotes via Nexus FXP Aggregation.
                                     </Alert>
                                 )}
-                                {feeBreakdown && <FeeCard fee={feeBreakdown} quote={selectedQuote} now={now} />}
+                                {/* Fee Type Selector - Phase 2 Implementation */}
+                                {feeBreakdown && (
+                                    <>
+                                        <Card withBorder p="xs">
+                                            <Group justify="space-between" align="center">
+                                                <Text size="sm" fw={500}>Fee Payment Method</Text>
+                                                <SegmentedControl
+                                                    size="xs"
+                                                    value={sourceFeeType}
+                                                    onChange={(value) => {
+                                                        setSourceFeeType(value as "INVOICED" | "DEDUCTED");
+                                                        // Refetch fees with new type
+                                                        if (selectedQuote) {
+                                                            getPreTransactionDisclosure(selectedQuote.quoteId, value as "INVOICED" | "DEDUCTED")
+                                                                .then(fees => setFeeBreakdown(fees))
+                                                                .catch(() => notifications.show({
+                                                                    title: "Error",
+                                                                    message: "Failed to update fee breakdown",
+                                                                    color: "red"
+                                                                }));
+                                                        }
+                                                    }}
+                                                    data={[
+                                                        { label: "Invoiced (Add to total)", value: "INVOICED" },
+                                                        { label: "Deducted (From amount)", value: "DEDUCTED" }
+                                                    ]}
+                                                />
+                                            </Group>
+                                            <Text size="xs" c="dimmed" mt="xs">
+                                                {sourceFeeType === "INVOICED" 
+                                                    ? "Fee is added on top - you pay the fee separately"
+                                                    : "Fee is deducted from transfer amount - recipient receives less"}
+                                            </Text>
+                                        </Card>
+                                        <FeeCard fee={feeBreakdown} quote={selectedQuote} now={now} />
+                                    </>
+                                )}
                             </Stack>
                         </Tabs.Panel>
 
@@ -1093,235 +1309,4 @@ export function PaymentPage() {
     );
 }
 
-// Fee breakdown card component - displays Pre-Transaction Disclosure
-// With proper invariants: payout_gross = recipient_net + dest_fee, sender_total = principal + fees
-function FeeCard({ fee, quote, now }: { fee: FeeBreakdown; quote: Quote | null; now: number }) {
-    // Helper to safely parse numbers - returns 0 if NaN
-    const safeNumber = (val: string | undefined | null): number => {
-        const n = Number(val);
-        return isNaN(n) ? 0 : n;
-    };
-
-    // Use totalCostPercent from backend (calculated vs mid-market benchmark)
-    const totalCostPct = Math.abs(safeNumber(fee.totalCostPercent));
-    const isWithinG20 = totalCostPct <= 3.0;
-
-    return (
-        <Card withBorder radius="md" p="xl" bg="var(--mantine-color-dark-8)">
-            <Group justify="space-between" mb="lg">
-                <Group gap="xs">
-                    <IconReceipt size={24} color="var(--mantine-color-blue-filled)" />
-                    <Title order={4}>Pre-Transaction Disclosure</Title>
-                </Group>
-                <Badge
-                    color={isWithinG20 ? "green" : "orange"}
-                    variant="light"
-                    leftSection={<IconInfoCircle size={14} />}
-                >
-                    {totalCostPct.toFixed(2)}% Cost vs Mid-Market
-                </Badge>
-            </Group>
-
-            {/* G20 Alignment Visualization */}
-            <Box mb="xl">
-                <Group justify="space-between" mb={5}>
-                    <Text size="xs" fw={700} tt="uppercase">G20 Target Alignment (&lt; 3%)</Text>
-                    <Text size="xs" c={isWithinG20 ? "green" : "orange"}>
-                        {isWithinG20 ? "Target Met" : "Above Target"}
-                    </Text>
-                </Group>
-                <Progress
-                    value={Math.min(100, (totalCostPct / 3.0) * 100)}
-                    color={isWithinG20 ? "green" : "orange"}
-                    size="sm"
-                    radius="xl"
-                />
-            </Box>
-
-            <Stack gap="xl">
-                {/* Sender Side (Amount to be Debited) */}
-                <Box>
-                    <Text size="sm" c="dimmed">Amount to be Debited (Total)</Text>
-                    <Text size="xl" fw={700} c="blue">
-                        {fee.sourceCurrency} {safeNumber(fee.senderTotal).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </Text>
-                </Box>
-
-                {/* Recipient Side (Amount Received) */}
-                <Box>
-                    <Text size="sm" c="dimmed">Amount Recipient Receives (Net)</Text>
-                    <Text size="xl" fw={700} c="green">
-                        {fee.destinationCurrency} {safeNumber(fee.recipientNetAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </Text>
-                </Box>
-
-                {/* Fee Breakdown Table - with reconciliation */}
-                <Table withColumnBorders={false} verticalSpacing="sm">
-                    <Table.Tbody>
-                        <Table.Tr>
-                            <Table.Td fw={500}>Sender Principal (FX Amount)</Table.Td>
-                            <Table.Td ta="right">{fee.sourceCurrency} {safeNumber(fee.senderPrincipal).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
-                        </Table.Tr>
-                        <Table.Tr>
-                            <Table.Td c="dimmed" pl="lg">+ Source PSP Fee ({fee.sourcePspFeeType})</Table.Td>
-                            <Table.Td ta="right" c="dimmed">{fee.sourceCurrency} {safeNumber(fee.sourcePspFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
-                        </Table.Tr>
-                        <Table.Tr>
-                            <Table.Td c="dimmed" pl="lg">+ Nexus Scheme Fee</Table.Td>
-                            <Table.Td ta="right" c="dimmed">{fee.sourceCurrency} {safeNumber(fee.schemeFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
-                        </Table.Tr>
-                        <Table.Tr style={{ borderTop: "1px solid var(--mantine-color-dark-4)" }}>
-                            <Table.Td fw={600}>= Total Debited</Table.Td>
-                            <Table.Td ta="right" fw={600}>{fee.sourceCurrency} {safeNumber(fee.senderTotal).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
-                        </Table.Tr>
-                    </Table.Tbody>
-                </Table>
-
-                <Table withColumnBorders={false} verticalSpacing="sm">
-                    <Table.Tbody>
-                        <Table.Tr>
-                            <Table.Td fw={500}>Payout Amount (Gross)</Table.Td>
-                            <Table.Td ta="right">{fee.destinationCurrency} {safeNumber(fee.payoutGrossAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
-                        </Table.Tr>
-                        <Table.Tr>
-                            <Table.Td c="dimmed" pl="lg">− Destination PSP Fee (Deducted)</Table.Td>
-                            <Table.Td ta="right" c="dimmed">{fee.destinationCurrency} {safeNumber(fee.destinationPspFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
-                        </Table.Tr>
-                        <Table.Tr style={{ borderTop: "1px solid var(--mantine-color-dark-4)" }}>
-                            <Table.Td fw={600}>= Recipient Receives (Net)</Table.Td>
-                            <Table.Td ta="right" fw={600}>{fee.destinationCurrency} {safeNumber(fee.recipientNetAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
-                        </Table.Tr>
-                    </Table.Tbody>
-                </Table>
-
-                {/* Exchange Rates with explicit units */}
-                <Stack gap="xs" p="md" bg="var(--mantine-color-dark-7)" style={{ borderRadius: "8px" }}>
-                    <Group justify="space-between">
-                        <Stack gap={0}>
-                            <Text size="sm" fw={700}>Market FX Rate (Mid)</Text>
-                            <Text size="xs" c="dimmed">Before spread applied</Text>
-                        </Stack>
-                        <Text size="lg" fw={700} c="blue">
-                            1 {fee.sourceCurrency} = {safeNumber(fee.marketRate).toLocaleString(undefined, { maximumFractionDigits: 4 })} {fee.destinationCurrency}
-                        </Text>
-                    </Group>
-                    <Group justify="space-between">
-                        <Stack gap={0}>
-                            <Text size="sm" c="dimmed">Customer Rate (After {fee.appliedSpreadBps} bps spread)</Text>
-                            <Text size="xs" c="dimmed">Rate used for FX conversion</Text>
-                        </Stack>
-                        <Text size="sm" c="cyan" fw={500}>
-                            1 {fee.sourceCurrency} = {safeNumber(fee.customerRate).toLocaleString(undefined, { maximumFractionDigits: 4 })} {fee.destinationCurrency}
-                        </Text>
-                    </Group>
-                    <Group justify="space-between">
-                        <Stack gap={0}>
-                            <Text size="sm" c="dimmed">Effective Rate (All-In)</Text>
-                            <Text size="xs" c="dimmed">Recipient receives ÷ Sender pays</Text>
-                        </Stack>
-                        <Text size="sm" c="orange" fw={500}>
-                            1 {fee.sourceCurrency} = {safeNumber(fee.effectiveRate).toLocaleString(undefined, { maximumFractionDigits: 4 })} {fee.destinationCurrency}
-                        </Text>
-                    </Group>
-                    {quote && (
-                        <Badge color="blue" variant="dot" size="lg" fullWidth mt="sm">
-                            Quote locked for next {Math.max(0, Math.floor((new Date(quote.expiresAt.replace(/\+00:00Z$/, 'Z')).getTime() - now) / 1000))}s
-                        </Badge>
-                    )}
-                </Stack>
-            </Stack>
-        </Card>
-    );
-}
-
-// Lifecycle accordion component
-function LifecycleAccordion({
-    stepsByPhase,
-    getStepIcon,
-    getStepColor,
-    feeBreakdown,
-    resolution,
-    intermediaries,
-}: {
-    stepsByPhase: { phase: number; name: string; steps: LifecycleStep[] }[];
-    getStepIcon: (status: LifecycleStep["status"]) => React.ReactNode;
-    getStepColor: (status: LifecycleStep["status"]) => string;
-    feeBreakdown: FeeBreakdown | null;
-    resolution: ProxyResolutionResult | null;
-    intermediaries: IntermediaryAgentsResponse | null;
-}) {
-    return (
-        <Accordion defaultValue={["1", "2"]} multiple>
-            {stepsByPhase.map(({ phase, name, steps }) => {
-                const completedCount = steps.filter((s) => s.status === "completed").length;
-                const hasActive = steps.some((s) => s.status === "active");
-                return (
-                    <Accordion.Item key={phase} value={String(phase)}>
-                        <Accordion.Control>
-                            <Group justify="space-between">
-                                <Text size="sm" fw={500}>Phase {phase}: {name}</Text>
-                                <Badge size="sm" color={completedCount === steps.length ? "green" : hasActive ? "blue" : "gray"}>
-                                    {completedCount}/{steps.length}
-                                </Badge>
-                            </Group>
-                        </Accordion.Control>
-                        <Accordion.Panel>
-                            <Timeline active={steps.findIndex((s) => s.status === "active")} bulletSize={20} lineWidth={2}>
-                                {steps.map((step) => (
-                                    <Timeline.Item
-                                        key={step.id}
-                                        bullet={getStepIcon(step.status)}
-                                        color={getStepColor(step.status)}
-                                        title={
-                                            <Group justify="space-between" align="center" style={{ width: "100%" }}>
-                                                <Group gap="xs">
-                                                    <Text size="sm" fw={700}>{step.id}. {step.name}</Text>
-                                                    {step.isoMessage !== "-" && (
-                                                        <Badge size="xs" variant="outline">{step.isoMessage}</Badge>
-                                                    )}
-                                                </Group>
-                                                <Text size="xs" c="dimmed" fs="italic">{step.apiCall}</Text>
-                                            </Group>
-                                        }
-                                    >
-                                        {/* Step-specific details */}
-                                        {step.id === 6 && feeBreakdown && (
-                                            <Box mt={4} p="xs" bg="var(--mantine-color-dark-6)" style={{ borderRadius: "4px" }}>
-                                                <Text size="xs">Rate: {feeBreakdown.marketRate} • Total Debit: {feeBreakdown.sourceCurrency} {feeBreakdown.senderTotal}</Text>
-                                            </Box>
-                                        )}
-                                        {step.id === 8 && resolution && (
-                                            <Box mt={4} p="xs" bg="var(--mantine-color-dark-6)" style={{ borderRadius: "4px" }}>
-                                                <Text size="xs" fw={700} c="green">Resolved: {resolution.beneficiaryName || resolution.accountName}</Text>
-                                                <Text size="xs">Bank: {resolution.agentBic || resolution.bankName || "Unknown"}</Text>
-                                            </Box>
-                                        )}
-                                        {step.id === 13 && intermediaries && (
-                                            <Box mt={4} p="xs" bg="var(--mantine-color-dark-6)" style={{ borderRadius: "4px" }}>
-                                                <Stack gap={4}>
-                                                    <Group justify="space-between">
-                                                        <Text size="xs" fw={700} c="blue">Source SAP (IntermediaryAgent1)</Text>
-                                                        <Text size="xs">{intermediaries.intermediaryAgent1.bic}</Text>
-                                                    </Group>
-                                                    <Text size="xs" c="dimmed">Acc: {intermediaries.intermediaryAgent1.accountNumber}</Text>
-                                                    <Group justify="space-between">
-                                                        <Text size="xs" fw={700} c="green">Dest SAP (IntermediaryAgent2)</Text>
-                                                        <Text size="xs">{intermediaries.intermediaryAgent2.bic}</Text>
-                                                    </Group>
-                                                    <Text size="xs" c="dimmed">Acc: {intermediaries.intermediaryAgent2.accountNumber}</Text>
-                                                </Stack>
-                                            </Box>
-                                        )}
-                                        {step.id === 17 && step.status === "completed" && (
-                                            <Text size="xs" c="green" fw={700} mt={4}>ACCC: Settlement Confirmed</Text>
-                                        )}
-                                    </Timeline.Item>
-                                ))}
-                            </Timeline>
-                        </Accordion.Panel>
-                    </Accordion.Item>
-                );
-            })}
-        </Accordion>
-    );
-}
+// FeeCard and LifecycleAccordion are now imported from ../components/payment

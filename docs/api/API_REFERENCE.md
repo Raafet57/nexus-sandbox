@@ -1,6 +1,10 @@
-# API Reference: Nexus Global Payments
+# API Reference: Nexus Global Payments (Complete)
 
-> This document provides comprehensive API documentation for integrating with the Nexus Global Payments platform.
+> **Purpose**: This is the **complete API documentation** for integrating with the Nexus Global Payments platform. It contains all endpoints, schemas, and specifications.
+
+> **Quick Reference**: For a concise overview of commonly used endpoints, see the root-level [API_REFERENCE.md](../../API_REFERENCE.md) file.
+
+> **Note**: This sandbox implementation currently operates without authentication for development convenience.
 
 ## Base URLs
 
@@ -265,7 +269,7 @@ Retrieve intermediary agent (SAP) account details for a quote.
 
 ## 4. Proxy Resolution API
 
-### POST /proxy/resolve
+### POST /v1/addressing/resolve
 
 Resolve a proxy (alias) to account details.
 
@@ -539,7 +543,7 @@ Retrieve the status of a payment by UETR.
 |----------|------------|--------|
 | `GET /quotes` | 100 requests | Per minute per PSP |
 | `GET /fees-and-amounts` | 200 requests | Per minute per PSP |
-| `POST /proxy/resolve` | 50 requests | Per minute per PSP |
+| `POST /v1/addressing/resolve` | 50 requests | Per minute per PSP |
 | `GET /payments/{uetr}` | 500 requests | Per minute per PSP |
 
 **Rate Limit Headers:**

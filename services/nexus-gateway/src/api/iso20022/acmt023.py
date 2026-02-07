@@ -93,6 +93,46 @@ async def process_acmt023(
             }
         )
     
+    # Step 2: Parse ISO 20022 fields per documentation
+    # XPath: /Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Prxy/Tp/Cd for proxy type
+    # XPath: /Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Prxy/Id for proxy value
+    # XPath: /Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Id/IBAN for IBAN
+    # XPath: /Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Id/Othr/Id for account number
+    try:
+        from lxml import etree
+        root = etree.fromstring(xml_content.encode())
+        ns = {"doc": "urn:iso:std:iso:20022:tech:xsd:acmt.023.001.03"}
+        
+        def get_text(xpath, default=None):
+            elements = root.xpath(xpath, namespaces=ns)
+            if elements:
+                return elements[0].text if hasattr(elements[0], 'text') else str(elements[0])
+            # Try without namespace
+            simple_xpath = xpath.replace('doc:', '')
+            elements = root.xpath(simple_xpath)
+            if elements:
+                return elements[0].text if hasattr(elements[0], 'text') else str(elements[0])
+            return default
+        
+        parsed_fields = {
+            "messageId": get_text(".//doc:MsgId") or get_text(".//MsgId"),
+            "creationDateTime": get_text(".//doc:CreDtTm") or get_text(".//CreDtTm"),
+            # Proxy resolution fields (per documentation paths)
+            "proxyType": get_text(".//doc:Prxy/doc:Tp/doc:Cd") or get_text(".//Prxy/Tp/Cd"),
+            "proxyValue": get_text(".//doc:Prxy/doc:Id") or get_text(".//Prxy/Id"),
+            # Account resolution fields  
+            "iban": get_text(".//doc:Acct/doc:Id/doc:IBAN") or get_text(".//Acct/Id/IBAN"),
+            "accountId": get_text(".//doc:Acct/doc:Id/doc:Othr/doc:Id") or get_text(".//Acct/Id/Othr/Id"),
+            # Destination info
+            "destinationPspBic": get_text(".//doc:Agt/doc:FinInstnId/doc:BICFI") or get_text(".//Agt/FinInstnId/BICFI"),
+        }
+        
+        logger.info(f"Parsed acmt.023: {parsed_fields}")
+        
+    except Exception as e:
+        logger.warning(f"Failed to parse acmt.023 fields: {e}")
+        parsed_fields = {}
+    
     # For sandbox: Accept and acknowledge
     # In production: Parse XML, route to PDO, wait for acmt.024
     

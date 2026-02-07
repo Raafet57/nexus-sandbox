@@ -47,7 +47,7 @@ class FinInstListResponse(BaseModel):
     - SAP: Settlement Access Providers
     
     Reference: https://docs.nexusglobalpayments.org/apis/fin-insts
-    """
+    """,
 )
 async def list_fin_insts_by_role(
     role: Literal["PSP", "FXP", "SAP"],
@@ -61,22 +61,25 @@ async def list_fin_insts_by_role(
     if role == "PSP":
         query = text("""
             SELECT 
-                psp_id as id, name, bic, country_code, 'PSP' as role, is_active
-            FROM psps WHERE is_active = true
+                psp_id::text as id, name, bic, country_code, 'PSP' as role,
+                (participant_status = 'ACTIVE') as is_active
+            FROM psps WHERE participant_status = 'ACTIVE'
             ORDER BY country_code, name
         """)
     elif role == "FXP":
         query = text("""
             SELECT 
-                fxp_id as id, name, '' as bic, '' as country_code, 'FXP' as role, is_active
-            FROM fxps WHERE is_active = true
+                fxp_id::text as id, name, '' as bic, '' as country_code, 'FXP' as role,
+                (participant_status = 'ACTIVE') as is_active
+            FROM fxps WHERE participant_status = 'ACTIVE'
             ORDER BY name
         """)
     elif role == "SAP":
         query = text("""
             SELECT 
-                sap_id as id, name, bic, country_code, 'SAP' as role, is_active
-            FROM saps WHERE is_active = true
+                sap_id::text as id, name, bic, country_code, 'SAP' as role,
+                (participant_status = 'ACTIVE') as is_active
+            FROM saps WHERE participant_status = 'ACTIVE'
             ORDER BY country_code, name
         """)
     else:
@@ -115,7 +118,7 @@ async def list_fin_insts_by_role(
     bank/PSP selection for the Sender.
     
     Reference: https://docs.nexusglobalpayments.org/apis/fin-insts
-    """
+    """,
 )
 async def list_fin_insts_by_country(
     country_code: str,
@@ -128,17 +131,19 @@ async def list_fin_insts_by_country(
     if role == "PSP":
         query = text("""
             SELECT 
-                psp_id as id, name, bic, country_code, 'PSP' as role, is_active
+                psp_id::text as id, name, bic, country_code, 'PSP' as role,
+                (participant_status = 'ACTIVE') as is_active
             FROM psps 
-            WHERE country_code = :country_code AND is_active = true
+            WHERE country_code = :country_code AND participant_status = 'ACTIVE'
             ORDER BY name
         """)
     elif role == "SAP":
         query = text("""
             SELECT 
-                sap_id as id, name, bic, country_code, 'SAP' as role, is_active
+                sap_id::text as id, name, bic, country_code, 'SAP' as role,
+                (participant_status = 'ACTIVE') as is_active
             FROM saps 
-            WHERE country_code = :country_code AND is_active = true
+            WHERE country_code = :country_code AND participant_status = 'ACTIVE'
             ORDER BY name
         """)
     else:
@@ -182,11 +187,11 @@ async def list_fin_insts_by_country(
     - ID: Internal Nexus ID
     
     Reference: https://docs.nexusglobalpayments.org/apis/fin-insts
-    """
+    """,
 )
 async def lookup_fin_inst(
-    id_type: Literal["BICFI", "LEI", "ID"] = Path(..., alias="idType"),
-    id_value: str = Path(..., alias="idValue"),
+    id_type: Literal["BICFI", "LEI", "ID"] = Path(...),
+    id_value: str = Path(...),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -198,11 +203,11 @@ async def lookup_fin_inst(
         # Search PSPs and SAPs by BIC
         psp_query = text("""
             SELECT psp_id as id, name, bic, country_code, 'PSP' as role
-            FROM psps WHERE UPPER(bic) = :id_value AND is_active = true
+            FROM psps WHERE UPPER(bic) = :id_value AND participant_status = 'ACTIVE'
         """)
         sap_query = text("""
             SELECT sap_id as id, name, bic, country_code, 'SAP' as role
-            FROM saps WHERE UPPER(bic) = :id_value AND is_active = true
+            FROM saps WHERE UPPER(bic) = :id_value AND participant_status = 'ACTIVE'
         """)
         
         psp_result = await db.execute(psp_query, {"id_value": id_value.upper()})
@@ -286,14 +291,12 @@ async def create_fin_inst(
     # Check if duplicate BIC exists
     queries = {
         "PSP": text("SELECT 1 FROM psps WHERE bic = :bic"),
-        "FXP": text("SELECT 1 FROM fxps WHERE name = :name"),  # FXPs might not have BIC in current schema, checking name
+        "FXP": text("SELECT 1 FROM fxps WHERE name = :name"),
         "SAP": text("SELECT 1 FROM saps WHERE bic = :bic")
     }
     
-    # Validation logic specific to roles
     check_query = queries.get(body.role)
     if check_query:
-        # Note: FXP schema might check name or ID, here we check name uniqueness for FXP, BIC for others
         check_param = {"name": body.name} if body.role == "FXP" else {"bic": body.bic.upper()}
         res = await db.execute(check_query, check_param)
         if res.fetchone():
@@ -301,32 +304,35 @@ async def create_fin_inst(
 
     import uuid
     new_id = str(uuid.uuid4())
+    status = "ACTIVE" if body.isActive else "INACTIVE"
     
     if body.role == "PSP":
         insert_query = text("""
-            INSERT INTO psps (psp_id, bic, name, country_code, is_active, fee_percent)
-            VALUES (:id, :bic, :name, :country, :active, 0.0)
+            INSERT INTO psps (psp_id, bic, name, country_code, participant_status, fee_percent)
+            VALUES (:id, :bic, :name, :country, :status, 0.0)
         """)
         await db.execute(insert_query, {
             "id": new_id, "bic": body.bic.upper(), "name": body.name, 
-            "country": body.countryCode.upper(), "active": body.isActive
+            "country": body.countryCode.upper(), "status": status
         })
     elif body.role == "FXP":
         insert_query = text("""
-            INSERT INTO fxps (fxp_id, name, is_active, base_spread_bps)
-            VALUES (:id, :name, :active, 50)
+            INSERT INTO fxps (fxp_id, fxp_code, name, participant_status, base_spread_bps)
+            VALUES (:id, :code, :name, :status, 50)
         """)
         await db.execute(insert_query, {
-            "id": new_id, "name": body.name, "active": body.isActive
+            "id": new_id, "code": body.bic.upper() or f"FXP-{new_id[:8].upper()}", 
+            "name": body.name, "status": status
         })
     elif body.role == "SAP":
         insert_query = text("""
-            INSERT INTO saps (sap_id, bic, name, country_code, is_active)
-            VALUES (:id, :bic, :name, :country, :active)
+            INSERT INTO saps (sap_id, bic, name, country_code, currency_code, participant_status)
+            VALUES (:id, :bic, :name, :country, :currency, :status)
         """)
         await db.execute(insert_query, {
             "id": new_id, "bic": body.bic.upper(), "name": body.name, 
-            "country": body.countryCode.upper(), "active": body.isActive
+            "country": body.countryCode.upper(), "currency": "USD",
+            "status": status
         })
     
     await db.commit()
@@ -345,26 +351,25 @@ async def create_fin_inst(
 )
 async def update_fin_inst(
     body: FinInstRequest,
-    fin_inst_id: str = Path(..., alias="finInstId"),
+    fin_inst_id: str = Path(...),
     db: AsyncSession = Depends(get_db)
 ):
     """Update an FI."""
-    # This assumes ID is unique across tables or user knows the role table to look in.
-    # For simplicity, we try to update based on the role provided in the body.
+    status = "ACTIVE" if body.isActive else "INACTIVE"
     
     if body.role == "PSP":
         query = text("""
-            UPDATE psps SET bic = :bic, name = :name, country_code = :country, is_active = :active
+            UPDATE psps SET bic = :bic, name = :name, country_code = :country, participant_status = :status
             WHERE psp_id = :id
         """)
     elif body.role == "FXP":
         query = text("""
-            UPDATE fxps SET name = :name, is_active = :active
+            UPDATE fxps SET name = :name, participant_status = :status
             WHERE fxp_id = :id
         """)
     elif body.role == "SAP":
         query = text("""
-            UPDATE saps SET bic = :bic, name = :name, country_code = :country, is_active = :active
+            UPDATE saps SET bic = :bic, name = :name, country_code = :country, participant_status = :status
             WHERE sap_id = :id
         """)
     else:
@@ -375,11 +380,10 @@ async def update_fin_inst(
         "bic": body.bic.upper(),
         "name": body.name,
         "country": body.countryCode.upper(),
-        "active": body.isActive
+        "status": status
     }
-    # FXP table doesn't have bic/country in schema inferred from create, removing if needed or ensuring query aligns
     if body.role == "FXP":
-        params = {"id": fin_inst_id, "name": body.name, "active": body.isActive}
+        params = {"id": fin_inst_id, "name": body.name, "status": status}
 
     result = await db.execute(query, params)
     await db.commit()

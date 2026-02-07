@@ -75,8 +75,9 @@ Design assumptions documented during implementation:
 
 | Document | Description |
 |----------|-------------|
-| [Docker Setup](./infrastructure/DOCKER_SETUP.md) | Container configuration |
-| [Schema Documentation](./database/SCHEMA.md) | Database schema reference |
+| [Observability](./infrastructure/OBSERVABILITY.md) | Monitoring and tracing setup |
+| [Kubernetes Deployment](./infrastructure/KUBERNETES_DEPLOYMENT.md) | K8s deployment guides |
+| [PostgreSQL Schema](./database/POSTGRESQL_SCHEMA.md) | Database schema reference |
 | [Security Model](./security/SECURITY_MODEL.md) | Authentication and authorization |
 
 ---

@@ -73,7 +73,7 @@ def get_mbno_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=False
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/Id"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Prxy/Id"
         ),
         AddressTypeInput(
             label=InputLabel(code="MBNO", title={"en": "Address Type Code"}),
@@ -85,7 +85,7 @@ def get_mbno_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=True  # Hidden field
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/SchmeNm/Cd"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Prxy/Tp/Cd"
         ),
     ]
     
@@ -120,7 +120,7 @@ def get_emal_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=False
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/Id"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Prxy/Id"
         ),
         AddressTypeInput(
             label=InputLabel(code="EMAL", title={"en": "Address Type Code"}),
@@ -132,7 +132,7 @@ def get_emal_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=True
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/SchmeNm/Cd"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Prxy/Tp/Cd"
         ),
     ]
 
@@ -150,7 +150,7 @@ def get_acct_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=False
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/AcctId/Othr/Id"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Id/Othr/Id"
         ),
         AddressTypeInput(
             label=InputLabel(code="BICFI", title={"en": "Bank BIC/SWIFT Code"}),
@@ -174,7 +174,7 @@ def get_acct_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=True
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/AcctId/Othr/SchmeNm/Cd"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Id/Othr/SchmeNm/Cd"
         ),
     ]
 
@@ -200,7 +200,7 @@ def get_iban_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=False
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/AcctId/IBAN"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Id/IBAN"
         ),
         AddressTypeInput(
             label=InputLabel(code="IBAN", title={"en": "Address Type Code"}),
@@ -212,7 +212,7 @@ def get_iban_inputs(country_code: str) -> list[AddressTypeInput]:
                 required=True,
                 hidden=True
             ),
-            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/AcctId/Othr/SchmeNm/Cd"
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Acct/Id/Othr/SchmeNm/Cd"
         ),
     ]
 
@@ -253,35 +253,194 @@ def get_nidn_inputs(country_code: str) -> list[AddressTypeInput]:
     ]
 
 
+def get_uen_inputs(country_code: str) -> list[AddressTypeInput]:
+    """Business UEN inputs (Singapore)."""
+    return [
+        AddressTypeInput(
+            label=InputLabel(code="UEN", title={"en": "Business UEN"}),
+            attributes=InputAttributes(
+                name="accountOrProxyId",
+                type="text",
+                pattern=r"^[0-9]{8}[A-Z]$|^[0-9]{9}[A-Z]$|^[TSR]\d{2}[A-Z]{2}\d{4}[A-Z]$",
+                placeholder="201812345M",
+                required=True,
+                hidden=False
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/Id"
+        ),
+        AddressTypeInput(
+            label=InputLabel(code="UEN", title={"en": "Address Type Code"}),
+            attributes=InputAttributes(
+                name="addressTypeCode",
+                type="text",
+                pattern=None,
+                placeholder=None,
+                required=True,
+                hidden=True
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/SchmeNm/Cd"
+        ),
+    ]
+
+
+def get_ewal_inputs(country_code: str) -> list[AddressTypeInput]:
+    """E-Wallet ID inputs."""
+    return [
+        AddressTypeInput(
+            label=InputLabel(code="EWAL", title={"en": "E-Wallet ID"}),
+            attributes=InputAttributes(
+                name="accountOrProxyId",
+                type="text",
+                pattern=r"^[0-9]{10,20}$",
+                placeholder="14000123456789",
+                required=True,
+                hidden=False
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/PrvtId/Othr/Id"
+        ),
+        AddressTypeInput(
+            label=InputLabel(code="EWAL", title={"en": "Address Type Code"}),
+            attributes=InputAttributes(
+                name="addressTypeCode",
+                type="text",
+                pattern=None,
+                placeholder=None,
+                required=True,
+                hidden=True
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/PrvtId/Othr/SchmeNm/Cd"
+        ),
+    ]
+
+
+def get_bizn_inputs(country_code: str) -> list[AddressTypeInput]:
+    """Business Registration Number inputs."""
+    return [
+        AddressTypeInput(
+            label=InputLabel(code="BIZN", title={"en": "Business Registration No"}),
+            attributes=InputAttributes(
+                name="accountOrProxyId",
+                type="text",
+                pattern=r"^[A-Z0-9]{5,20}$",
+                placeholder="12345678",
+                required=True,
+                hidden=False
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/Id"
+        ),
+        AddressTypeInput(
+            label=InputLabel(code="BIZN", title={"en": "Address Type Code"}),
+            attributes=InputAttributes(
+                name="addressTypeCode",
+                type="text",
+                pattern=None,
+                placeholder=None,
+                required=True,
+                hidden=True
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/OrgId/Othr/SchmeNm/Cd"
+        ),
+    ]
+
+
+def get_pass_inputs(country_code: str) -> list[AddressTypeInput]:
+    """Passport Number inputs."""
+    return [
+        AddressTypeInput(
+            label=InputLabel(code="PASS", title={"en": "Passport Number"}),
+            attributes=InputAttributes(
+                name="accountOrProxyId",
+                type="text",
+                pattern=r"^[A-Z0-9]{6,20}$",
+                placeholder="A12345678",
+                required=True,
+                hidden=False
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/PrvtId/Othr/Id"
+        ),
+        AddressTypeInput(
+            label=InputLabel(code="PASS", title={"en": "Address Type Code"}),
+            attributes=InputAttributes(
+                name="addressTypeCode",
+                type="text",
+                pattern=None,
+                placeholder=None,
+                required=True,
+                hidden=True
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/PrvtId/Othr/SchmeNm/Cd"
+        ),
+    ]
+
+
+def get_vpa_inputs(country_code: str) -> list[AddressTypeInput]:
+    """Virtual Payment Address (India UPI)."""
+    return [
+        AddressTypeInput(
+            label=InputLabel(code="VPA", title={"en": "UPI ID (VPA)"}),
+            attributes=InputAttributes(
+                name="accountOrProxyId",
+                type="text",
+                pattern=r"^[a-zA-Z0-9._-]+@[a-zA-Z0-9]+$",
+                placeholder="user@upi",
+                required=True,
+                hidden=False
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/PrvtId/Othr/Id"
+        ),
+        AddressTypeInput(
+            label=InputLabel(code="VPA", title={"en": "Address Type Code"}),
+            attributes=InputAttributes(
+                name="addressTypeCode",
+                type="text",
+                pattern=None,
+                placeholder=None,
+                required=True,
+                hidden=True
+            ),
+            iso20022Path="acmt023/Document/IdVrfctnReq/Vrfctn/PtyAndAcctId/Pty/Id/PrvtId/Othr/SchmeNm/Cd"
+        ),
+    ]
+
+
+# Mapping of proxy types to input generators
 # Mapping of proxy types to input generators
 # Reference: migrations/002_seed_data.sql standardizes these codes
+# Additional ISO 20022 ExternalProxyAccountType1Code aliases added per documentation
 PROXY_TYPE_GENERATORS = {
-    "MOBI": get_mbno_inputs,  # Singapore, Thailand, Malaysia (legacy standard)
+    "MOBI": get_mbno_inputs,  # Singapore, Thailand, Malaysia, Philippines (legacy standard)
     "MBNO": get_mbno_inputs,  # Indonesia, India (new standard)
     "EMAL": get_emal_inputs,
-    # "NIK": get_nik_inputs, # Not yet implemented
-    # "VPA": get_vpa_inputs, # Not yet implemented
-    # "UEN": get_uen_inputs, # Not yet implemented
-    # "NRIC": get_nric_inputs, # Not yet implemented
+    "NIK": get_nidn_inputs,   # Indonesia National ID (alias to NIDN generator)
+    "VPA": get_vpa_inputs,    # India UPI
+    "UEN": get_uen_inputs,    # Singapore Business
+    "NRIC": get_nidn_inputs,  # Singapore/Malaysia National ID (alias to NIDN generator)
     "NIDN": get_nidn_inputs,
-    # "EWAL": get_ewal_inputs, # Not yet implemented
-    # "BIZN": get_bizn_inputs, # Not yet implemented
-    # "PASS": get_pass_inputs, # Not yet implemented
+    "EWAL": get_ewal_inputs,  # Thailand E-Wallet
+    "BIZN": get_bizn_inputs,  # Malaysia Business
+    "PASS": get_pass_inputs,  # Malaysia Passport
     "ACCT": get_acct_inputs,
-    "IBAN": get_iban_inputs, # IBAN is a type of ACCT, but has its own generator
+    "IBAN": get_iban_inputs,  # IBAN is a type of ACCT, but has its own generator
+    # ISO 20022 standard aliases per documentation
+    "CCPT": get_pass_inputs,  # Certificate - Passport Number (alias to PASS)
+    "CINC": get_bizn_inputs,  # Certificate of Incorporation Number (alias to BIZN)
+    "SHID": get_nidn_inputs,  # Scheme Identification Number (alias to NIDN)
+    "TELE": get_mbno_inputs,  # Telephone Number - landline (alias to MBNO)
+    "TOKN": get_vpa_inputs,   # Virtual payment address token (alias to VPA)
 }
 
 # Country-specific proxy type availability
+# MUST Match migrations/002_seed_data.sql
 COUNTRY_PROXY_TYPES = {
-    "SG": ["MOBI", "NIDN", "ACCT"],  # PayNow
-    "TH": ["MOBI", "NIDN", "ACCT"],  # PromptPay
-    "MY": ["MOBI", "NIDN", "ACCT"],  # DuitNow
-    "PH": ["MBNO", "ACCT"],          # InstaPay (MBNO requires finInstId)
-    "ID": ["MBNO", "EMAL", "ACCT"],  # BI-FAST
-    "IN": ["MBNO", "ACCT"],          # UPI
-    "DE": ["IBAN"],                  # SEPA
-    "FR": ["IBAN"],                  # SEPA
-    "GB": ["IBAN", "ACCT"],          # Faster Payments
+    "SG": ["MOBI", "NRIC", "UEN", "ACCT"],     # PayNow
+    "TH": ["MOBI", "NIDN", "EWAL", "ACCT"],    # PromptPay
+    "MY": ["MOBI", "NRIC", "BIZN", "PASS", "ACCT"], # DuitNow
+    "PH": ["MOBI", "ACCT"],                    # InstaPay (SQL uses MOBI, not MBNO)
+    "ID": ["MBNO", "EMAL", "NIK", "ACCT"],     # BI-FAST
+    "IN": ["MBNO", "VPA", "ACCT"],             # UPI
+    "DE": ["IBAN"],                            # SEPA
+    "FR": ["IBAN"],                            # SEPA
+    "GB": ["IBAN", "ACCT"],                    # Faster Payments
 }
 
 

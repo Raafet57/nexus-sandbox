@@ -3,27 +3,27 @@
 This document provides concrete XML examples for all 11 ISO 20022 message types supported by the Nexus Sandbox. These examples follow the Nexus technical specifications exactly.
 
 ## Table of Contents
-1. [pacs.008.001.08 - Payment Instruction](#pacs008)
-2. [pacs.002.001.10 - Payment Status Report](#pacs002)
-3. [acmt.023.001.03 - Proxy Resolution Request](#acmt023)
-4. [acmt.024.001.03 - Proxy Resolution Report](#acmt024)
-5. [camt.054.001.08 - Reconciliation Report](#camt054)
+1. [pacs.008.001.13 - Payment Instruction](#pacs008)
+2. [pacs.002.001.15 - Payment Status Report](#pacs002)
+3. [acmt.023.001.04 - Proxy Resolution Request](#acmt023)
+4. [acmt.024.001.04 - Proxy Resolution Report](#acmt024)
+5. [camt.054.001.13 - Reconciliation Report](#camt054)
 6. [camt.103.001.03 - Create Reservation](#camt103)
-7. [pain.001.001.11 - Payment Initiation](#pain001)
-8. [pacs.004.001.11 - Payment Return](#pacs004)
-9. [pacs.028.001.05 - Payment Status Request](#pacs028)
-10. [camt.056.001.10 - Recall Request](#camt056)
-11. [camt.029.001.11 - Recall Response](#camt029)
+7. [pain.001.001.12 - Payment Initiation](#pain001)
+8. [pacs.004.001.14 - Payment Return](#pacs004)
+9. [pacs.028.001.06 - Payment Status Request](#pacs028)
+10. [camt.056.001.11 - Recall Request](#camt056)
+11. [camt.029.001.13 - Recall Response](#camt029)
 
 ---
 
 <a name="pacs008"></a>
-## 1. pacs.008.001.08 - Payment Instruction
+## 1. pacs.008.001.13 - Payment Instruction
 **Purpose:** Sent from Source PSP to Nexus (via Source IPS) to initiate a cross-border payment.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
     <GrpHdr>
       <MsgId>MSG20260204-001</MsgId>
@@ -48,10 +48,10 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
       <XchgRate>1.345</XchgRate>
       <ChrgBr>SHAR</ChrgBr>
       <InstgAgt>
-        <FinInstnId><BICFI>DBSGSGSG</BICFI></FinInstnId>
+        <FinInstnId><BICFI>DBSSSGSG</BICFI></FinInstnId>
       </InstgAgt>
       <InstdAgt>
-        <FinInstnId><BICFI>BKKBTHBK</BICFI></FinInstnId>
+        <FinInstnId><BICFI>KASITHBK</BICFI></FinInstnId>
       </InstdAgt>
       <Dbtr>
         <Nm>John Doe</Nm>
@@ -76,13 +76,13 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="pacs002"></a>
-## 2. pacs.002.001.10 - Payment Status Report
+## 2. pacs.002.001.15 - Payment Status Report
 **Purpose:** Returned by Destination PSP/IPS to acknowledge or reject the payment.
 
 ### Happy Path (ACCC)
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.002.001.10">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.002.001.15">
   <FIToFIPmtStsRpt>
     <GrpHdr>
       <MsgId>RPT20260204-001</MsgId>
@@ -100,12 +100,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="acmt023"></a>
-## 3. acmt.023.001.03 - Proxy Resolution Request
+## 3. acmt.023.001.04 - Proxy Resolution Request
 **Purpose:** Sent from Source PSP to Nexus to resolve a mobile/email proxy to account details.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:acmt.023.001.03">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:acmt.023.001.04">
   <IdVrfctnReq>
     <Assgnmt>
       <MsgId>REQ20260204-999</MsgId>
@@ -129,12 +129,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="acmt024"></a>
-## 4. acmt.024.001.03 - Proxy Resolution Report
+## 4. acmt.024.001.04 - Proxy Resolution Report
 **Purpose:** Returned by Nexus (via PDO) to provide account numbers and beneficiary names.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:acmt.024.001.03">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:acmt.024.001.04">
   <IdVrfctnRpt>
     <Assgnmt>
       <MsgId>RPT20260204-999</MsgId>
@@ -148,7 +148,7 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
         <Acct>
           <Id><Othr><Id>0987654321</Id></Othr></Id>
         </Acct>
-        <Agt><FinInstnId><BICFI>BKKBTHBK</BICFI></FinInstnId></Agt>
+        <Agt><FinInstnId><BICFI>KASITHBK</BICFI></FinInstnId></Agt>
       </UpdtdPtyAndAcctId>
     </Rpt>
   </IdVrfctnRpt>
@@ -158,12 +158,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="camt054"></a>
-## 5. camt.054.001.08 - Reconciliation Report
+## 5. camt.054.001.13 - Reconciliation Report
 **Purpose:** Sent from Nexus Gateway to IPS Operators for end-of-day settlement reconciliation.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.054.001.08">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.054.001.13">
   <BkToCstmrDbtCdtNtfctn>
     <GrpHdr>
       <MsgId>RECON-20260204</MsgId>
@@ -214,12 +214,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="pain001"></a>
-## 7. pain.001.001.11 - Payment Initiation
+## 7. pain.001.001.12 - Payment Initiation
 **Purpose:** SAP Integration Method 3 - Destination IPS acts as a corporate client to initiate payment via SAP's corporate API.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.11">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.001.001.12">
   <CstmrCdtTrfInitn>
     <GrpHdr>
       <MsgId>INIT20260204-123</MsgId>
@@ -252,12 +252,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="pacs004"></a>
-## 8. pacs.004.001.11 - Payment Return
+## 8. pacs.004.001.14 - Payment Return
 **Purpose:** Formal payment return message (Future Roadmap). *Note: Release 1 uses pacs.008.*
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.004.001.11">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.004.001.14">
   <PmtRtr>
     <GrpHdr>
       <MsgId>RET20260204-001</MsgId>
@@ -265,7 +265,7 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
     </GrpHdr>
     <OrgnlGrpInf>
       <OrgnlMsgId>MSG20260204-001</OrgnlMsgId>
-      <OrgnlMsgNmId>pacs.008.001.08</OrgnlMsgNmId>
+      <OrgnlMsgNmId>pacs.008.001.13</OrgnlMsgNmId>
     </OrgnlGrpInf>
     <TxInf>
       <RtrId>RTR-01</RtrId>
@@ -280,12 +280,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="pacs028"></a>
-## 9. pacs.028.001.05 - Payment Status Request
+## 9. pacs.028.001.06 - Payment Status Request
 **Purpose:** Sent to Nexus to request current status if pacs.002 is not received (Future Roadmap).
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.028.001.05">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.028.001.06">
   <FIToFIPmtStsReq>
     <GrpHdr>
       <MsgId>QRY20260204-01</MsgId>
@@ -293,7 +293,7 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
     </GrpHdr>
     <TxInf>
       <OrgnlUETR>91398cbd-0838-453f-b2c7-536e829f2b8e</OrgnlUETR>
-      <InstgAgt><FinInstnId><BICFI>DBSGSGSG</BICFI></FinInstnId></InstgAgt>
+      <InstgAgt><FinInstnId><BICFI>DBSSSGSG</BICFI></FinInstnId></InstgAgt>
     </TxInf>
   </FIToFIPmtStsReq>
 </Document>
@@ -302,12 +302,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="camt056"></a>
-## 10. camt.056.001.10 - Recall Request
+## 10. camt.056.001.11 - Recall Request
 **Purpose:** Sent after settlement to request retrieval of funds (Retraction/Cancellation).
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.056.001.10">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.056.001.11">
   <FIToFIPmtCxlReq>
     <GrpHdr>
       <MsgId>RCL20260204-01</MsgId>
@@ -326,12 +326,12 @@ This document provides concrete XML examples for all 11 ISO 20022 message types 
 ---
 
 <a name="camt029"></a>
-## 11. camt.029.001.11 - Recall Response
+## 11. camt.029.001.13 - Recall Response
 **Purpose:** Response to camt.056 indicating if recall was accepted or rejected.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.029.001.11">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.029.001.13">
   <RsltnOfInvstgtn>
     <Assgnmt>
       <MsgId>RSP20260204-01</MsgId>

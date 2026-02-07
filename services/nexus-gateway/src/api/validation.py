@@ -72,21 +72,24 @@ class SchemaRegistry:
             logger.warning(f"Schema directory not found: {self.schema_dir}")
             return
         
+        # NOTE: XSD files exist both at root and in subdirectories
+        # Using root-level paths for simpler configuration
+        # See: specs/iso20022/xsd structure
         schema_files = {
             # Release 1 - Mandatory
-            "pacs.008": "pacs.008.001.13.xsd",
-            "pacs.002": "pacs.002.001.15.xsd",
-            "acmt.023": "acmt.023.001.04.xsd",
-            "acmt.024": "acmt.024.001.04.xsd",
-            "camt.054": "camt.054.001.13.xsd",
+            "pacs.008": "pacs.008.001.13.xsd",         # ✅ Exists at root
+            "pacs.002": "pacs.002.001.15.xsd",         # ✅ Exists at root (also in pacs_2024_2025/)
+            "acmt.023": "acmt.023.001.04.xsd",         # ✅ Exists at root (also in acmt_2024/)
+            "acmt.024": "acmt.024.001.04.xsd",         # ✅ Exists at root (also in acmt_2024/)
+            "camt.054": "camt.054.001.13.xsd",         # ✅ Exists at root (also in camt_2025/)
             # Optional - SAP Integration
-            "camt.103": "camt.103.001.03.xsd",
-            "pain.001": "pain.001.001.12.xsd",
+            "camt.103": "camt.103.001.03.xsd",         # ✅ Exists at root (also in camt_2025/)
+            "pain.001": "pain.001.001.12.xsd",         # ✅ Exists at root
             # Future/Roadmap
-            "pacs.004": "pacs.004.001.14.xsd",
-            "pacs.028": "pacs.028.001.06.xsd",  # May not exist - will log warning
-            "camt.056": "camt.056.001.11.xsd",
-            "camt.029": "camt.029.001.13.xsd",
+            "pacs.004": "pacs.004.001.14.xsd",         # ✅ Exists at root (also in pacs_2024_2025/)
+            "pacs.028": "pacs.028.001.06.xsd",         # ✅ Exists at root (also in pacs_2024_2025/)
+            "camt.056": "camt.056.001.11.xsd",         # ✅ Exists at root (also in camt_2025/)
+            "camt.029": "camt.029.001.13.xsd",         # ✅ Exists at root (also in camt_2025/)
         }
         
         for msg_type, filename in schema_files.items():
@@ -189,12 +192,21 @@ def validate_xml(xml_content: str | bytes, msg_type: str) -> ValidationResult:
     
     schema = registry.get_schema(msg_type)
     
-    # Parse XML
+    # Parse XML with secure parser settings
+    # SECURITY: Disable entity resolution to prevent XXE and Billion Laughs attacks
     try:
         if isinstance(xml_content, str):
             xml_content = xml_content.encode('utf-8')
         
-        doc = etree.fromstring(xml_content)
+        # Create a secure parser that prevents XXE attacks
+        parser = etree.XMLParser(
+            resolve_entities=False,  # Prevent external entity resolution (XXE)
+            no_network=True,         # Disable network access for external DTDs
+            dtd_validation=False,    # Skip DTD validation (can be malicious)
+            load_dtd=False,          # Don't load external DTDs
+            huge_tree=False,         # Prevent denial of service via huge documents
+        )
+        doc = etree.fromstring(xml_content, parser=parser)
     except etree.XMLSyntaxError as e:
         return ValidationResult(
             valid=False,

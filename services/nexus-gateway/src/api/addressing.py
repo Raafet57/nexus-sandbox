@@ -128,11 +128,44 @@ async def resolve_proxy(request: ProxyResolutionRequest, db: AsyncSession = Depe
     })
     row = result.fetchone()
     
-    # Check for explicit unhappy flow triggers (test data)
-    # Pattern: +XX9999999999 triggers BE23
-    is_not_found_test = val.endswith("9999999999")
+    # ==========================================================================
+    # Unhappy flow triggers (test patterns for all documented acmt.024 error codes)
+    # Reference: Nexus documentation - acmt.024 error codes
+    # ==========================================================================
+    error_code = None
+    error_patterns = {
+        # Pattern: last 4 digits determine error code
+        # Full acmt.024 error code coverage per Nexus documentation
+        "9999": ("BE23", "Account Proxy Invalid - proxy not registered"),
+        "9888": ("AC04", "Closed Account Number - account is closed"),
+        "9777": ("AC06", "Blocked Account - account is blocked"),
+        "9666": ("AB08", "Offline Creditor Agent - destination PSP unavailable"),
+        "9555": ("AC01", "Incorrect Account Number - account format invalid"),
+        "9444": ("AGNT", "Incorrect Agent - creditor agent BIC invalid"),
+        "9333": ("DUPL", "Duplicate Request - already processed"),
+        "9222": ("MD07", "End Customer Deceased - account holder deceased"),
+        "9111": ("RC07", "Invalid Creditor BIC - creditor BIC not found"),
+        # Additional error codes per EXTENSIVE_PARITY_REVIEW_REPORT.md
+        "9000": ("RR01", "Missing Debtor Account/ID - required field missing"),
+        "8999": ("RR02", "Missing Debtor Name/Address - required field missing"),
+        "8888": ("RC06", "Invalid Debtor BIC - debtor BIC not found in directory"),
+    }
     
-    if row and not is_not_found_test:
+    # Check for fraud name pattern
+    is_fraud_test = "FRAUD" in (request.proxy_value or "").upper()
+    
+    # Check proxy value patterns
+    for pattern_suffix, (code, description) in error_patterns.items():
+        if val.endswith(pattern_suffix):
+            error_code = code
+            error_description = description
+            break
+    
+    if is_fraud_test:
+        error_code = "FRAD"
+        error_description = "Fraudulent Origin - suspected fraud detected"
+    
+    if row and not error_code:
         # Happy flow: Proxy found
         res_data = {
             "accountNumber": row.account_number,
@@ -144,18 +177,20 @@ async def resolve_proxy(request: ProxyResolutionRequest, db: AsyncSession = Depe
         }
         verification_result = "true"
         reason_block = ""
-    elif is_not_found_test:
-        # Unhappy flow: BE23 - Account Proxy Invalid (for testing)
+    elif error_code:
+        # Unhappy flow: Return specific error code
         res_data = {
             "accountNumber": "",
             "accountType": "",
             "agentBic": "",
             "beneficiaryName": "",
             "displayName": "",
-            "status": "NOT_FOUND"
+            "status": "NOT_FOUND",
+            "errorCode": error_code,
+            "errorDescription": error_description
         }
         verification_result = "false"
-        reason_block = "<Rsn><Cd>BE23</Cd></Rsn>"
+        reason_block = f"<Rsn><Cd>{error_code}</Cd></Rsn>"
     else:
         # Sandbox fallback: generate synthetic but valid data
         res_data = {
@@ -177,6 +212,7 @@ async def resolve_proxy(request: ProxyResolutionRequest, db: AsyncSession = Depe
       <UpdtdPtyAndAcctId>
         <Pty><Nm>{res_data["beneficiaryName"]}</Nm></Pty>
         <Acct>
+          <Nm>{res_data["displayName"]}</Nm>
           <Id><Othr><Id>{res_data["accountNumber"]}</Id></Othr></Id>
         </Acct>
         <Agt><FinInstnId><BICFI>{res_data["agentBic"]}</BICFI></FinInstnId></Agt>
@@ -219,17 +255,19 @@ async def resolve_proxy(request: ProxyResolutionRequest, db: AsyncSession = Depe
         data={
             "beneficiary": res_data.get("beneficiaryName", ""),
             "status": res_data["status"],
-            "reasonCode": "BE23" if res_data["status"] == "NOT_FOUND" else None
+            "reasonCode": res_data.get("errorCode") if res_data["status"] == "NOT_FOUND" else None
         },
         acmt024_xml=acmt024_xml  # Store in dedicated column for Message Observatory
     )
 
     if res_data["status"] == "NOT_FOUND":
+        actual_code = res_data.get("errorCode", "BE23")
+        actual_desc = res_data.get("errorDescription", "Account Proxy Invalid - proxy not registered in destination directory")
         raise HTTPException(
             status_code=404,
             detail={
-                "code": "BE23",
-                "message": "Account Proxy Invalid - proxy not registered in destination directory",
+                "code": actual_code,
+                "message": actual_desc,
                 "correlationId": correlation_id
             }
         )

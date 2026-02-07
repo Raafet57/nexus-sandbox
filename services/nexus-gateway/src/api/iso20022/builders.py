@@ -340,23 +340,35 @@ def build_acmt024(
     verification_result: bool,
     resolved_iban: str = None,
     resolved_name: str = None,
+    resolved_account_name: str = None,
     assigner_bic: str = "NEXUSGEN",
     assignee_bic: str = "NEXUSGEN"
 ) -> str:
-    """Build acmt.024 Identification Verification Report."""
+    """Build acmt.024 Identification Verification Report.
+
+    Per FATF Recommendation 16, the full party name must be included for
+    sanctions screening. The <Pty><Nm> element contains the full verified
+    name, while <Acct><Nm> contains the display name (may be masked).
+    """
     now = datetime.now(timezone.utc).isoformat()
     msg_id = f"ACMT024-{original_identification_id[:8]}-{int(datetime.now(timezone.utc).timestamp())}"
     result_str = "true" if verification_result else "false"
-    
+
     resolved_block = ""
     if verification_result and resolved_iban:
+        # Include both party name (full, for sanctions) and account name (may be masked)
+        party_name = resolved_name or resolved_account_name or "Unknown"
+        account_display_name = resolved_account_name or resolved_name or "Unknown"
         resolved_block = f"""
       <UpdtdPtyAndAcctId>
+        <Pty>
+          <Nm>{party_name}</Nm>
+        </Pty>
         <Acct>
           <Id>
             <IBAN>{resolved_iban}</IBAN>
           </Id>
-          <Nm>{resolved_name}</Nm>
+          <Nm>{account_display_name}</Nm>
         </Acct>
       </UpdtdPtyAndAcctId>"""
 
@@ -389,4 +401,158 @@ def build_acmt024(
       <Vrfctn>{result_str}</Vrfctn>{resolved_block}
     </Rpt>
   </IdVrfctnRpt>
+</Document>"""
+
+
+def build_pacs008(
+    uetr: str,
+    amount: float,
+    source_currency: str,
+    destination_currency: str,
+    exchange_rate: float,
+    debtor_name: str,
+    debtor_account: str,
+    debtor_bic: str,
+    creditor_name: str,
+    creditor_account: str,
+    creditor_bic: str,
+    quote_id: str,
+    source_sap_bic: str,
+    source_sap_account: str,
+    destination_sap_bic: str,
+    destination_sap_account: str,
+    instruction_priority: str = "NORM",
+    remittance_info: str = "",
+    purpose_code: str = ""
+) -> str:
+    """Build pacs.008 FI to FI Customer Credit Transfer.
+
+    Reference: https://docs.nexusglobalpayments.org/messaging-and-translation/message-pacs.008-fi-to-fi-customer-credit-transfer
+
+    This is the core payment instruction message used in Step 15 of the payment flow.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    msg_id = f"PACS008-{uetr[:8]}-{int(datetime.now(timezone.utc).timestamp())}"
+
+    # Format amount with proper decimal places
+    amount_str = f"{amount:.2f}"
+
+    purpose_block = f"""
+      <PmtTpInf>
+        <Prps>
+          <Cd>{purpose_code}</Cd>
+        </Prps>
+      </PmtTpInf>""" if purpose_code else ""
+
+    remittance_block = f"""
+      <RmtInf>
+        <Ustrd>
+          <Cd>{remittance_info}</Cd>
+        </Ustrd>
+      </RmtInf>""" if remittance_info else ""
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
+  <FIToFICstmrCdtTrf>
+    <GrpHdr>
+      <MsgId>{msg_id}</MsgId>
+      <CreDtTm>{now}</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <SttlmInf>
+        <SttlmMtd>CLRG</SttlmMtd>
+      </SttlmInf>
+    </GrpHdr>
+    <CdtTrfTxInf>
+      <PmtId>
+        <InstrId>{uetr}</InstrId>
+        <EndToEndId>{uetr}</EndToEndId>
+        <TxId>{msg_id}</TxId>
+      </PmtId>
+      <Amt>
+        <InstdAmt Ccy="{source_currency}">{amount_str}</InstdAmt>
+        <EqvtAmt>
+          <CcyAndAmtTp>
+            <Ccy>{destination_currency}</Ccy>
+            <Amt>{(amount * exchange_rate):.2f}</Amt>
+          </CcyAndAmtTp>
+        </EqvtAmt>
+      </Amt>
+      <ChrgBr>SHAR</ChgrBr>{purpose_block}
+      <InstgAgt>
+        <FinInstnId>
+          <BICFI>{debtor_bic}</BICFI>
+        </FinInstnId>
+      </InstgAgt>
+      <InstdAgt>
+        <Pty>
+          <Nm>{debtor_name}</Nm>
+        </Pty>
+        <FinInstnId>
+          <BICFI>{source_sap_bic}</BICFI>
+        </FinInstnId>
+        <BrkchAcct>
+          <Acct>
+            <Id>{source_sap_account}</Id>
+          </Acct>
+        </BrkchAcct>
+      </InstdAgt>
+      <Dbtr>
+        <Nm>{debtor_name}</Nm>
+        <PstlAdr>
+          <Ctry>SG</Ctry>
+        </PstlAdr>
+      </Dbtr>
+      <DbtrAcct>
+        <Id>
+          <Othr>
+            <Id>{debtor_account}</Id>
+          </Othr>
+        </Id>
+      </DbtrAcct>
+      <DbtrAgt>
+        <FinInstnId>
+          <BICFI>{source_sap_bic}</BICFI>
+        </FinInstnId>
+      </DbtrAgt>
+      <CdtrAgt>
+        <FinInstnId>
+          <BICFI>{destination_sap_bic}</BICFI>
+        </FinInstnId>
+      </CdtrAgt>
+      <Cdtr>
+        <Nm>{creditor_name}</Nm>
+        <PstlAdr>
+          <Ctry>TH</Ctry>
+        </PstlAdr>
+      </Cdtr>
+      <CdttrAcct>
+        <Id>
+          <Othr>
+            <Id>{creditor_account}</Id>
+          </Othr>
+        </Id>
+      </CdtTrAcct>
+      <RmtInf>
+        <Strd>
+          <CdtrRefInf>
+            <Ref>{remittance_info or "Payment"}</Ref>
+          </CdtrRefInf>
+        </Strd>
+      </RmtInf>
+      <PmtTpInf>
+        <InstrPrty>{instruction_priority}</InstrPrty>
+        <ClrChanl>
+          <Cd>RTGS</Cd>
+        </ClrChanl>
+      </PmtTpInf>
+      <RltdRmtInf>
+        <Ustrd>
+          <CdtrRefInfo>
+            <Ref>NEXUSORG|{quote_id}</Ref>
+            <Ref>NEXUSUETR|{uetr}</Ref>
+          </CdtrRefInfo>
+        </Ustrd>
+      </RltdRmtInf>
+    </CdtTrfTxInf>
+  </FIToFICstmrCdtTrf>
 </Document>"""

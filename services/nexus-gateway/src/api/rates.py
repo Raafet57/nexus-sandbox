@@ -6,7 +6,7 @@ Reference: https://docs.nexusglobalpayments.org/fx-provision/rates-from-third-pa
 FX Providers submit and manage their rates through these endpoints.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -119,7 +119,7 @@ async def submit_rate(
     
     # Insert new rate
     rate_id = uuid4()
-    valid_from = datetime.utcnow()
+    valid_from = datetime.now(timezone.utc)
     valid_until = valid_from + timedelta(seconds=rate.valid_seconds)
     
     insert_query = text("""
@@ -170,7 +170,7 @@ async def submit_rate(
     """,
 )
 async def withdraw_rate(
-    rate_id: UUID = Path(..., alias="rateId", description="Rate ID to withdraw"),
+    rate_id: UUID = Path(..., description="Rate ID to withdraw"),
     # TODO: Get FXP ID from JWT token
     fxp_code: str = "FXP-ABC",  # Temporary: should come from auth
     db: AsyncSession = Depends(get_db),

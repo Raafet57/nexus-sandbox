@@ -38,7 +38,7 @@ return format_db_result(db_result)
 |----------|-------------------|
 | `GET /quotes/{id}/intermediary-agents` | Singapore FAST SAP + Thailand PromptPay SAP |
 | `GET /quotes` | Example quotes for selected corridor |
-| `POST /proxy/resolve` | Mock beneficiary (Rajesh Kumar, SBININBB) |
+| `POST /v1/addressing/resolve` | Mock beneficiary (Rajesh Kumar, SBININBB) |
 | `GET /countries` | Full country list from seed data |
 
 ### Mock Data Values (Consistent Across Demo)

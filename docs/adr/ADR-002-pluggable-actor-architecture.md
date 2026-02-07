@@ -151,7 +151,7 @@ GET /liquidity/alerts           # Check liquidity status
 
 ```yaml
 # Proxy resolution
-POST /proxy/resolve             # Resolve proxy to account
+POST /v1/addressing/resolve     # Resolve proxy to account
   # Input: acmt.023 (Identification Verification Request)
   # Output: acmt.024 (Identification Verification Report)
 ```

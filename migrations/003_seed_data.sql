@@ -1,5 +1,6 @@
 -- Nexus Global Payments Sandbox - Seed Data
 -- Reference: https://docs.nexusglobalpayments.org/apis/countries
+-- Migration: 003 (Renamed from 002_seed_data.sql to fix ordering conflict)
 
 -- =============================================================================
 -- CURRENCIES
@@ -105,7 +106,12 @@ INSERT INTO psps (bic, name, country_code, fee_percent) VALUES
     
     -- Indonesia PSPs
     ('BMRIIDJA', 'Bank Mandiri', 'ID', 0.003),
-    ('BCAIIDJA', 'Bank Central Asia', 'ID', 0.003);
+    ('BCAIIDJA', 'Bank Central Asia', 'ID', 0.003),
+
+    -- India PSPs
+    ('SBININBB', 'State Bank of India', 'IN', 0.003),
+    ('HDFCINBB', 'HDFC Bank', 'IN', 0.003),
+    ('ICICINBB', 'ICICI Bank', 'IN', 0.003);
 
 -- =============================================================================
 -- FOREIGN EXCHANGE PROVIDERS (FXPs)
@@ -175,7 +181,8 @@ INSERT INTO pdos (name, country_code, supported_proxy_types) VALUES
     ('PromptPay Directory', 'TH', '["MOBI", "NIDN", "EWAL"]'::jsonb),
     ('DuitNow Directory', 'MY', '["MOBI", "NRIC", "BIZN", "PASS"]'::jsonb),
     ('InstaPay Directory', 'PH', '["MOBI"]'::jsonb),
-    ('BI-FAST Directory', 'ID', '["MOBI", "NIK"]'::jsonb);
+    ('BI-FAST Directory', 'ID', '["MOBI", "NIK"]'::jsonb),
+    ('UPI Directory', 'IN', '["MOBI", "VPA"]'::jsonb);
 
 -- =============================================================================
 -- ADDRESS TYPES
@@ -248,6 +255,26 @@ SELECT fxp_id, 'SGD', 'THB', 25.80, NOW(), NOW() + INTERVAL '100 years' FROM fxp
 UNION ALL
 SELECT fxp_id, 'SGD', 'MYR', 3.48, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-XYZ';
 
+-- FXP-GLOBAL rates (previously unused)
+INSERT INTO fx_rates (fxp_id, source_currency, destination_currency, base_rate, valid_from, valid_until)
+SELECT fxp_id, 'SGD', 'THB', 25.82, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-GLOBAL'
+UNION ALL
+SELECT fxp_id, 'SGD', 'MYR', 3.51, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-GLOBAL'
+UNION ALL
+SELECT fxp_id, 'SGD', 'PHP', 42.55, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-GLOBAL'
+UNION ALL
+SELECT fxp_id, 'SGD', 'IDR', 11520.00, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-GLOBAL'
+UNION ALL
+SELECT fxp_id, 'SGD', 'INR', 62.60, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-GLOBAL';
+
+-- Missing reverse rates (PHP, IDR, INR to SGD)
+INSERT INTO fx_rates (fxp_id, source_currency, destination_currency, base_rate, valid_from, valid_until)
+SELECT fxp_id, 'PHP', 'SGD', 0.0235, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
+UNION ALL
+SELECT fxp_id, 'IDR', 'SGD', 0.000087, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC'
+UNION ALL
+SELECT fxp_id, 'INR', 'SGD', 0.016, NOW(), NOW() + INTERVAL '100 years' FROM fxps WHERE fxp_code = 'FXP-ABC';
+
 -- =============================================================================
 -- PROXY REGISTRATIONS (Demo data for PDO)
 -- Reference: https://docs.nexusglobalpayments.org/addressing-and-proxy-resolution/proxy-and-account-resolution-process
@@ -258,27 +285,33 @@ INSERT INTO proxy_registrations (country_code, proxy_type, proxy_value, creditor
     ('SG', 'MOBI', '+6591234567', 'John Tan Wei Ming', 'Jo** T*n W*i M*ng', '1234567890', 'DBSSSGSG', 'DBS Bank'),
     ('SG', 'MOBI', '+6598765432', 'Mary Lim Siew Hwa', 'Ma** L*m S*ew H*a', '0987654321', 'OCBCSGSG', 'OCBC Bank'),
     ('SG', 'NRIC', 'S1234567A', 'Alice Wong Mei Ling', 'Al*ce W*ng M*i L*ng', '5555666677', 'DBSSSGSG', 'DBS Bank'),
-    
+    ('SG', 'UEN', '123456789C', 'Tech Innovations Pte Ltd', 'Te**h In******ns P*e L*d', '88889999001', 'UABORKKL', 'UOB Singapore'),
+
     -- Thailand test mobiles
     ('TH', 'MOBI', '+66812345678', 'Somchai Jaidee', 'So***ai Ja***e', 'TH123456789', 'KASITHBK', 'Kasikornbank'),
     ('TH', 'MOBI', '+66898765432', 'Siriwan Suksan', 'Si***an Su***n', 'TH987654321', 'BABORKKL', 'Bangkok Bank'),
     ('TH', 'NIDN', '1234567890123', 'Prasit Thongchai', 'Pr***t Th***ai', 'TH111222333', 'SICOTHBK', 'Siam Commercial Bank'),
-    
+    ('TH', 'EWAL', 'truemoney@wallet', 'Nattaya Wong', 'Na***a Wo***', 'TH999888777', 'KASITHBK', 'Kasikornbank'),
+
     -- Malaysia test mobiles
     ('MY', 'MOBI', '+60123456789', 'Ahmad bin Abdullah', 'Ah*** b*n Ab****ah', 'MY12345678901234', 'MABORKKL', 'Maybank'),
     ('MY', 'MOBI', '+60198765432', 'Siti Aminah binti Hassan', 'Si** Am***h b***i Ha***n', 'MY98765432109876', 'CIABORMY', 'CIMB Bank'),
-    
+
     -- Philippines test mobiles
     ('PH', 'MOBI', '+639123456789', 'Juan dela Cruz', 'Ju** de** Cr**', 'PH1234567890', 'BABORPMM', 'BDO Unibank'),
-    
+
     -- Indonesia test mobiles (BI-FAST)
     ('ID', 'MBNO', '+6281234567890', 'Budi Santoso', 'Bu** Sa***so', 'ID1234567890123456', 'BMRIIDJA', 'Bank Mandiri'),
     ('ID', 'MBNO', '+6289876543210', 'Siti Nurhaliza', 'Si** Nu***za', 'ID9876543210987654', 'BCAIIDJA', 'Bank Central Asia'),
     ('ID', 'EMAL', 'budi@example.co.id', 'Budi Hartono', 'Bu** Ha***no', 'ID5555666677778888', 'BMRIIDJA', 'Bank Mandiri'),
-    
+
     -- India test mobiles (UPI)
     ('IN', 'MBNO', '+919123456789', 'Rajesh Kumar', 'Ra***h Ku***r', 'IN12345678901234', 'SBININBB', 'State Bank of India'),
-    ('IN', 'MBNO', '+919876543210', 'Priya Sharma', 'Pr*** Sh***a', 'IN98765432109876', 'HABORINB', 'HDFC Bank');
+    ('IN', 'MBNO', '+919876543210', 'Priya Sharma', 'Pr*** Sh***a', 'IN98765432109876', 'HDFCINBB', 'HDFC Bank'),
+    ('IN', 'VPA', 'rajesh@upi', 'Rajesh Kumar', 'Ra***h Ku***r', 'IN12345678901234', 'SBININBB', 'State Bank of India'),
+    ('IN', 'VPA', 'priya@hdfc', 'Priya Sharma', 'Pr*** Sh***a', 'IN98765432109876', 'HDFCINBB', 'HDFC Bank'),
+    ('IN', 'VPA', 'amit@icici', 'Amit Patel', 'Am** Pa***l', 'IN55554444333322', 'ICICINBB', 'ICICI Bank'),
+    ('IN', 'VPA', 'neha@sbi', 'Neha Gupta', 'Ne**h Gu***a', 'IN77776666555544', 'SBININBB', 'State Bank of India');
 
 -- =============================================================================
 -- API CLIENTS (for OAuth)

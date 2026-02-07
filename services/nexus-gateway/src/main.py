@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from src.api import countries, quotes, rates, fees, health, currencies, fin_insts, fee_formulas, iso20022, address_types, relationships, intermediary_agents, pacs002, reconciliation, liquidity, returns, qr, addressing, payments_explorer, actors, psp, ips, pdo, demo_data
+from src.api import countries, quotes, rates, fees, health, currencies, fin_insts, fee_formulas, iso20022, address_types, relationships, intermediary_agents, reconciliation, liquidity, returns, qr, addressing, payments_explorer, actors, psp, ips, pdo, demo_data, sanctions, fxp, sap
 from src.config import settings
 from src.db import database
 from src.observability import setup_tracing
@@ -199,12 +199,21 @@ This API implements the complete 17-step payment flow:
 )
 
 # CORS middleware for demo UI
+# SECURITY: Restricted to specific origins. In production, use environment variable for allowed origins.
+ALLOWED_ORIGINS = [
+    "http://localhost:8080",     # Demo dashboard (Docker)
+    "http://localhost:3000",     # Dev server (Vite)
+    "http://localhost:5173",     # Alternative Vite port
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
 
 # Setup OpenTelemetry tracing
@@ -288,12 +297,7 @@ app.include_router(
     tags=["Quotes"],
 )
 
-# pacs.002 Payment Status Report (Step 17 completion)
-# Reference: https://docs.nexusglobalpayments.org/messaging-and-translation/message-pacs.002
-app.include_router(
-    pacs002.router,
-    tags=["ISO 20022 Messages"],
-)
+# pacs.002 is now included via iso20022.router
 
 # Reconciliation (camt.054 Bank to Customer Notification)
 # Reference: https://docs.nexusglobalpayments.org/settlement-access-provision/reconciliation
@@ -357,6 +361,20 @@ app.include_router(
 app.include_router(
     pdo.router,
     tags=["Proxy Directory Operators"],
+)
+
+# FXP (Foreign Exchange Provider) endpoints
+# Reference: https://docs.nexusglobalpayments.org/fx-provision
+app.include_router(
+    fxp.router,
+    tags=["FX Providers"],
+)
+
+# SAP (Settlement Access Provider) endpoints
+# Reference: https://docs.nexusglobalpayments.org/settlement-access-provision
+app.include_router(
+    sap.router,
+    tags=["Settlement Access Providers"],
 )
 
 # Demo Data Management (test data cleanup)

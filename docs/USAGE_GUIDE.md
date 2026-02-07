@@ -58,9 +58,12 @@ docker compose ps
 ### Step 2: Get FX Quote
 
 1. Enter amount: **1,000 SGD**
-2. Click **Get Quote**
-3. Compare quotes from multiple FXPs
-4. Select the best rate
+2. Select **Fee Type**:
+   - **INVOICED**: Fee added on top (recipient gets full amount)
+   - **DEDUCTED**: Fee deducted from transfer (you pay less, recipient gets less)
+3. Click **Get Quote**
+4. Compare quotes from multiple FXPs
+5. Select the best rate
 
 ### Step 3: Resolve Recipient
 
@@ -71,9 +74,25 @@ docker compose ps
 
 ### Step 4: Confirm & Send
 
-1. Review Pre-Transaction Disclosure (PTD)
-2. Click **Confirm & Send**
-3. Watch the 17-step lifecycle complete
+1. Review Pre-Transaction Disclosure (PTD) - see full fee breakdown
+2. Enter **Payment Reference** (optional message to recipient, max 140 chars)
+3. Provide **Sanctions Screening Data** (required for FATF R16 compliance):
+   - Recipient address
+   - Date of birth (if required)
+   - National ID (if required)
+4. Check **Explicit Confirmation** checkbox to confirm recipient details
+5. Select **Instruction Priority**:
+   - **HIGH**: 25-second timeout (urgent payments)
+   - **NORM**: 4-hour timeout (standard payments)
+6. Click **Confirm & Send**
+7. Watch the 17-step lifecycle complete
+
+> **Note**: The payment instruction includes mandatory ISO 20022 fields:
+> - `AccptncDtTm` (Acceptance Date Time)
+> - `InstrPrty` (Instruction Priority: HIGH/NORM)
+> - `ClrSys` (Clearing System: SGFAST, THBRT, etc.)
+> - `IntrmyAgt1/2` (Source/Destination SAP BICs)
+> - `RmtInf` (Payment Reference)
 
 ### Step 5: Explore Results
 
@@ -94,7 +113,11 @@ Test edge cases with these trigger values:
 |----------|---------------|------------|-------------|
 | **Proxy Not Found** | `+66999999999` | `BE23` | Account/Proxy Invalid |
 | **Quote Expired** | Wait 10+ minutes | `AB04` | Quote validity exceeded |
-| **Amount Too High** | `> 50,000` | `VAL01` | Maximum limit exceeded |
+| **Amount Too High** | `> 50,000` | `AM02` | Maximum limit exceeded |
+| **Insufficient Funds** | Amount ending in `99999` | `AM04` | Not enough liquidity |
+| **Closed Account** | `+60999999999` | `AC04` | Account closed |
+| **Regulatory Block** | `+62999999999` | `RR04` | Regulatory reason |
+| **Duplicate Payment** | Reuse same UETR | `DUPL` | Duplicate transaction |
 | **Invalid SAP** | (Internal) | `RC11` | Invalid Intermediary Agent |
 
 ---
@@ -108,10 +131,40 @@ Each actor type has a dedicated view:
 | Dashboard | Route | Purpose |
 |-----------|-------|---------|
 | PSP Dashboard | `/psp` | Source/Destination banks |
-| FXP Rates | `/fxp` | FX rate management |
-| SAP Liquidity | `/sap` | Settlement accounts |
+| FXP Dashboard | `/fxp` | FX rate management & PSP relationships |
+| SAP Dashboard | `/sap` | Settlement accounts & liquidity |
 | IPS Dashboard | `/ips` | Payment system operators |
 | PDO Dashboard | `/pdo` | Proxy directory |
+
+### Callback Authentication
+
+When you register an actor with a `callbackUrl`, callbacks are authenticated using HMAC-SHA256:
+
+**Headers:**
+```http
+X-Callback-Signature: sha256=abc123def456...
+X-Callback-Timestamp: 1704067200
+```
+
+**Verification (Python):**
+```python
+import hmac
+import hashlib
+
+def verify_callback(payload: str, signature: str, secret: str, timestamp: str) -> bool:
+    message = f"{timestamp}:{payload}"
+    expected = hmac.new(
+        secret.encode(),
+        message.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+```
+
+**Test your callback:**
+```bash
+POST /v1/actors/{bic}/callback-test
+```
 
 ### Developer Tools
 
@@ -120,6 +173,25 @@ Each actor type has a dedicated view:
 | Payments Explorer | `/explorer` | UETR lookup, lifecycle, XML |
 | Messages | `/messages` | Browse all ISO 20022 messages |
 | Network Mesh | `/mesh` | Actor interconnection map |
+
+### Message Storage
+
+All ISO 20022 XML messages are stored in the database (`payment_events` table):
+
+| Column | Message Type | Description |
+|--------|--------------|-------------|
+| `pacs008_message` | pacs.008 | Payment instruction (FI to FI Customer Credit Transfer) |
+| `pacs002_message` | pacs.002 | Status report (Payment Status Report) |
+| `acmt023_message` | acmt.023 | Proxy resolution request |
+| `acmt024_message` | acmt.024 | Proxy resolution response |
+| `camt054_message` | camt.054 | Reconciliation report |
+| `pacs004_message` | pacs.004 | Return payment (Release 2) |
+| `camt056_message` | camt.056 | Cancellation request (Recall) |
+
+Retrieve messages via API:
+```bash
+GET /v1/payments/{uetr}/messages
+```
 
 ---
 
@@ -141,6 +213,26 @@ Each actor type has a dedicated view:
 | Quote returning empty | Check FXP service: `docker compose logs fxp-simulator` |
 | Proxy not resolving | Verify PDO service: `docker compose logs pdo-simulator` |
 
+### Demo Data & Mock Mode
+
+The sandbox includes pre-seeded demo data loaded from `migrations/003_seed_data.sql`:
+
+**Countries & Currencies:**
+- Singapore (SGD), Thailand (THB), Malaysia (MYR)
+- Philippines (PHP), Indonesia (IDR), India (INR)
+
+**IPS Operators:**
+- FAST (Singapore), PromptPay (Thailand), DuitNow (Malaysia)
+- InstaPay (Philippines), BI-FAST (Indonesia), UPI (India)
+
+**FXP Rates:**
+- Mock FX rates are generated dynamically in demo mode
+- Real rates can be submitted via `POST /v1/fxp/rates`
+
+**Mock vs Real Mode:**
+- Set `MOCK_ENABLED=true` in frontend for offline demos
+- Real backend calls require running `nexus-gateway` service
+
 ### Useful Commands
 
 ```bash
@@ -150,8 +242,14 @@ docker compose logs -f nexus-gateway
 # Restart specific service
 docker compose restart demo-dashboard
 
-# Full reset
-docker compose down && docker compose up -d
+# Full reset (removes all data)
+docker compose down -v && docker compose up -d
+
+# Check database messages
+docker compose exec postgres psql -U nexus -c "SELECT uetr, status FROM payment_events LIMIT 5;"
+
+# View stored XML messages
+docker compose exec postgres psql -U nexus -c "SELECT uetr, LEFT(pacs008_message, 100) FROM payment_events WHERE pacs008_message IS NOT NULL LIMIT 1;"
 ```
 
 ---

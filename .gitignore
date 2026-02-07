@@ -103,4 +103,8 @@ site/
 
 # Large documentation dumps
 docs.nexusglobalpayments.org_documentation.md
+
+# Runtime artifacts
 nohup.out
+server.log
+*.out

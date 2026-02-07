@@ -20,14 +20,14 @@ from enum import Enum
 from lxml import etree
 import json
 
-from ..db import get_db
-from ..config import settings
-from . import validation as xsd_validation
+from ...db import get_db
+from ...config import settings
+from .. import validation as xsd_validation
 
 router = APIRouter(prefix="/v1/iso20022", tags=["ISO 20022 Messages"])
 
 
-from .schemas import (
+from ..schemas import (
     TransactionStatus,
     StatusReasonCode,
     Pacs002Request,
@@ -162,7 +162,7 @@ async def receive_pacs002_xml(
     xsd_result = xsd_validation.validate_pacs002(xml_content)
     if not xsd_result.valid:
         # Forensic Logging: Store violation in Message Observatory 
-        from .iso20022 import store_payment_event
+        from .utils import store_payment_event
         from uuid import uuid4
         
         failed_uetr = xsd_validation.safe_extract_uetr(xml_content) or f"UNKNOWN-{uuid4().hex[:8]}"
@@ -262,7 +262,7 @@ async def get_payment_status(
     
     return PaymentStatusResponse(
         uetr=uetr,
-        status=TransactionStatus.ACSP,
+        status=TransactionStatus.ACSC,
         statusReasonCode=None,
         statusReasonText=None,
         createdAt=datetime.now(timezone.utc).isoformat(),
@@ -304,6 +304,12 @@ def parse_pacs002(xml_content: str) -> dict:
             "statusReasonCode": get_text(".//StsRsnInf/Rsn/Cd") or get_text(".//doc:StsRsnInf/doc:Rsn/doc:Cd"),
             "statusReasonProprietary": get_text(".//StsRsnInf/Rsn/Prtry") or get_text(".//doc:StsRsnInf/doc:Rsn/doc:Prtry"),
             "acceptanceDateTime": get_text(".//AccptncDtTm") or get_text(".//doc:AccptncDtTm"),
+            # Added per ISO20022_PARITY_ANALYSIS_REPORT.md - OrgnlTxRef amount parsing
+            "originalInstrId": get_text(".//OrgnlInstrId") or get_text(".//doc:OrgnlInstrId"),
+            "originalEndToEndId": get_text(".//OrgnlEndToEndId") or get_text(".//doc:OrgnlEndToEndId"),
+            "originalTxId": get_text(".//OrgnlTxId") or get_text(".//doc:OrgnlTxId"),
+            "originalTxRefAmount": get_text(".//OrgnlTxRef//IntrBkSttlmAmt") or get_text(".//doc:OrgnlTxRef//doc:IntrBkSttlmAmt"),
+            "originalTxRefCurrency": get_text(".//OrgnlTxRef//IntrBkSttlmAmt/@Ccy") or get_text(".//doc:OrgnlTxRef//doc:IntrBkSttlmAmt/@Ccy"),
         }
     
     except Exception as e:

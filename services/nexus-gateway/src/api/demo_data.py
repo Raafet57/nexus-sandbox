@@ -55,33 +55,41 @@ async def purge_demo_data(
 ) -> dict:
     """Purge demo data from the database."""
     
-    # Calculate cutoff time
-    if age_hours > 0:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=age_hours)
-        time_condition = f"created_at < '{cutoff.isoformat()}'"
-    else:
-        time_condition = "1=1"  # All records
+    # Calculate cutoff time - use parameterized queries to prevent SQL injection
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=age_hours) if age_hours > 0 else None
     
-    # Count records to delete
+    # Count records to delete using parameterized queries
     counts = {}
     
-    # Count payments
-    payments_query = f"SELECT COUNT(*) FROM payments WHERE {time_condition}"
-    result = await db.execute(text(payments_query))
+    # Count payments - use proper parameter binding
+    if cutoff:
+        payments_count_query = text("SELECT COUNT(*) FROM payments WHERE created_at < :cutoff")
+        result = await db.execute(payments_count_query.bindparams(cutoff=cutoff))
+    else:
+        result = await db.execute(text("SELECT COUNT(*) FROM payments"))
     counts["payments"] = result.scalar() or 0
     
-    # Count payment_events
-    events_query = f"""
-        SELECT COUNT(*) FROM payment_events 
-        WHERE payment_uetr IN (SELECT uetr FROM payments WHERE {time_condition})
-    """
-    result = await db.execute(text(events_query))
+    # Count payment_events using subquery with parameterized cutoff
+    if cutoff:
+        events_count_query = text("""
+            SELECT COUNT(*) FROM payment_events 
+            WHERE payment_uetr IN (SELECT uetr FROM payments WHERE created_at < :cutoff)
+        """)
+        result = await db.execute(events_count_query.bindparams(cutoff=cutoff))
+    else:
+        result = await db.execute(text("""
+            SELECT COUNT(*) FROM payment_events 
+            WHERE payment_uetr IN (SELECT uetr FROM payments)
+        """))
     counts["payment_events"] = result.scalar() or 0
     
     # Count quotes if requested
     if include_quotes:
-        quotes_query = f"SELECT COUNT(*) FROM quotes WHERE {time_condition}"
-        result = await db.execute(text(quotes_query))
+        if cutoff:
+            quotes_count_query = text("SELECT COUNT(*) FROM quotes WHERE created_at < :cutoff")
+            result = await db.execute(quotes_count_query.bindparams(cutoff=cutoff))
+        else:
+            result = await db.execute(text("SELECT COUNT(*) FROM quotes"))
         counts["quotes"] = result.scalar() or 0
     
     # If dry run, just return counts
@@ -93,26 +101,38 @@ async def purge_demo_data(
             "message": "No data was deleted (dry run mode)"
         }
     
-    # Actually delete the data
+    # Actually delete the data using parameterized queries
     deleted = {}
     
     # Delete payment_events first (foreign key constraint)
-    events_delete = f"""
-        DELETE FROM payment_events 
-        WHERE payment_uetr IN (SELECT uetr FROM payments WHERE {time_condition})
-    """
-    result = await db.execute(text(events_delete))
+    if cutoff:
+        events_delete_query = text("""
+            DELETE FROM payment_events 
+            WHERE payment_uetr IN (SELECT uetr FROM payments WHERE created_at < :cutoff)
+        """)
+        result = await db.execute(events_delete_query.bindparams(cutoff=cutoff))
+    else:
+        result = await db.execute(text("""
+            DELETE FROM payment_events 
+            WHERE payment_uetr IN (SELECT uetr FROM payments)
+        """))
     deleted["payment_events"] = result.rowcount
     
     # Delete payments
-    payments_delete = f"DELETE FROM payments WHERE {time_condition}"
-    result = await db.execute(text(payments_delete))
+    if cutoff:
+        payments_delete_query = text("DELETE FROM payments WHERE created_at < :cutoff")
+        result = await db.execute(payments_delete_query.bindparams(cutoff=cutoff))
+    else:
+        result = await db.execute(text("DELETE FROM payments"))
     deleted["payments"] = result.rowcount
     
     # Delete quotes if requested
     if include_quotes:
-        quotes_delete = f"DELETE FROM quotes WHERE {time_condition}"
-        result = await db.execute(text(quotes_delete))
+        if cutoff:
+            quotes_delete_query = text("DELETE FROM quotes WHERE created_at < :cutoff")
+            result = await db.execute(quotes_delete_query.bindparams(cutoff=cutoff))
+        else:
+            result = await db.execute(text("DELETE FROM quotes"))
         deleted["quotes"] = result.rowcount
     
     await db.commit()

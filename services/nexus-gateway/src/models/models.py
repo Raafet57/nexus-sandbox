@@ -256,7 +256,6 @@ class Quote(Base):
 
     
     __table_args__ = (
-        Index("idx_quotes_psp", "psp_id"),
         Index("idx_quotes_fxp", "fxp_id"),
         Index("idx_quotes_expires", "expires_at"),
         CheckConstraint("amount_type IN ('SOURCE', 'DESTINATION')", name="ck_amount_type"),

@@ -2,6 +2,14 @@
 
 > This document defines the Kubernetes deployment architecture for the Nexus Global Payments platform, covering multi-region deployment, GitOps workflows, service mesh, and observability integration.
 
+> [!IMPORTANT]
+> **Reference Architecture Only**: This document describes a **production-grade Kubernetes deployment** for the actual Nexus scheme. The sandbox is designed for **local development and learning** using Docker Compose:
+> ```bash
+> # Sandbox deployment (what you actually run)
+> docker compose -f docker-compose.lite.yml up -d
+> ```
+> See [README.md](../../README.md) for sandbox setup instructions.
+
 ## Deployment Overview
 
 Nexus requires a highly available, multi-region Kubernetes deployment to ensure global payment processing continuity.

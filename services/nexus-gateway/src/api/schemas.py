@@ -304,6 +304,32 @@ class Acmt024Response(BaseModel):
     debtorNameMasked: Optional[str] = None
     processedAt: str
 
+
+class FATFRecipientData(BaseModel):
+    """FATF Recommendation 16 required recipient data for sanctions screening.
+    
+    Added per PAYMENT_FLOW_REVIEW_REPORT.md (lines 169-177).
+    Requires name (mandatory) plus at least one of: address, DOB/place, or national ID.
+    """
+    name: str = Field(..., description="Mandatory: Name of account holder")
+    account_number: Optional[str] = Field(None, alias="accountNumber")
+    # At least one of the following is required per FATF R16:
+    address: Optional[str] = None
+    date_of_birth: Optional[str] = Field(None, alias="dateOfBirth")
+    place_of_birth: Optional[str] = Field(None, alias="placeOfBirth")
+    national_id: Optional[str] = Field(None, alias="nationalId")
+    
+    def is_fatf_compliant(self) -> bool:
+        """Check if at least one of the additional FATF fields is present."""
+        return bool(
+            self.address or 
+            (self.date_of_birth and self.place_of_birth) or 
+            self.national_id
+        )
+    
+    class Config:
+        populate_by_name = True
+
 class Pacs028Response(BaseModel):
     """Response after pacs.028 status request."""
     requestId: str
@@ -378,19 +404,30 @@ class DemoPaymentRequest(BaseModel):
 class ActorRegistration(BaseModel):
     """Request body for actor registration."""
     name: str = Field(..., description="Entity name")
-    type: str = Field(..., description="Entity type (SOURCE_PSP, DESTINATION_PSP, FXP, SAP, IPS)")
-    country_code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
-    bic: Optional[str] = Field(None, description="SWIFT/BIC for financial institutions")
+    actor_type: str = Field(..., alias="actorType", description="Actor type (FXP, IPS, PSP, SAP, PDO)")
+    country_code: str = Field(..., alias="countryCode", description="ISO 3166-1 alpha-2 country code")
+    bic: str = Field(..., description="SWIFT/BIC code (8 or 11 characters)")
+    callback_url: Optional[str] = Field(None, alias="callbackUrl", description="Callback URL for ISO 20022 messages")
+    supported_currencies: Optional[list[str]] = Field(None, alias="supportedCurrencies", description="List of supported currency codes")
+    
+    class Config:
+        populate_by_name = True
 
 
 class Actor(BaseModel):
     """Standardized representation of a Nexus actor."""
-    id: UUID
-    name: str
-    type: str
-    country_code: str
-    bic: Optional[str] = None
-    status: str = "ACTIVE"
+    actor_id: str = Field(..., alias="actorId", description="Unique actor identifier")
+    name: str = Field(..., description="Entity name")
+    actor_type: str = Field(..., alias="actorType", description="Actor type (FXP, IPS, PSP, SAP, PDO)")
+    country_code: str = Field(..., alias="countryCode", description="ISO country code")
+    bic: str = Field(..., description="SWIFT/BIC code")
+    callback_url: Optional[str] = Field(None, alias="callbackUrl", description="Callback URL")
+    registered_at: str = Field(..., alias="registeredAt", description="Registration timestamp")
+    status: str = Field(default="ACTIVE", description="Actor status (ACTIVE, PENDING, SUSPENDED, REVOKED)")
+    supported_currencies: Optional[list[str]] = Field(None, alias="supportedCurrencies", description="Supported currencies")
+    
+    class Config:
+        populate_by_name = True
 
 
 class ActorsListResponse(BaseModel):
@@ -469,12 +506,15 @@ class IPSMembersResponse(BaseModel):
 
 
 class PSPResponse(BaseModel):
-    """PSP details response."""
+    """PSP details response with full financial institution identifiers."""
     bic: str = Field(..., description="Bank Identifier Code (SWIFT/BIC)")
     name: str = Field(..., description="Institution name")
     country_code: str = Field(..., description="ISO 3166-1 alpha-2 country code")
     fee_percent: float = Field(..., description="Fee percentage for transactions")
     psp_id: Optional[UUID] = None
+    # Added per EXTENSIVE_PARITY_REVIEW_REPORT.md - Financial Institution Identification
+    lei: Optional[str] = Field(None, description="Legal Entity Identifier (20 chars)")
+    clearing_system_member_id: Optional[str] = Field(None, alias="clrSysMmbId", description="Clearing System Member ID")
 
 
 class PSPListResponse(BaseModel):
@@ -666,29 +706,66 @@ class Pacs028Request(BaseModel):
 
 
 class TransactionStatus(str, Enum):
-    """ISO 20022 transaction status codes for pacs.002."""
-    ACCC = "ACCC"  # Settlement Completed
+    """ISO 20022 transaction status codes for pacs.002.
+    
+    Reference: https://docs.nexusglobalpayments.org/messaging-and-translation/message-pacs.002-payment-status-report
+    """
+    ACCC = "ACCC"  # Accepted Settlement Completed (Creditor Credited)
+    ACSC = "ACSC"  # Accepted Settlement Completed (General)
     RJCT = "RJCT"  # Rejected
     BLCK = "BLCK"  # Blocked
     ACWP = "ACWP"  # Accepted Without Posting
     ACTC = "ACTC"  # Technical Validation
     ACSP = "ACSP"  # Settlement in Process
 
+
+class PaymentLifecycleState(str, Enum):
+    """Payment lifecycle states per Nexus 17-step flow.
+    
+    Added per PAYMENT_FLOW_REVIEW_REPORT.md - provides formal state machine tracking.
+    Reference: https://docs.nexusglobalpayments.org/payment-processing/lifecycle
+    """
+    INITIATED = "INITIATED"           # Step 1-2: Country/currency selected
+    QUOTED = "QUOTED"                 # Step 3-6: FX quote obtained
+    COP_VERIFIED = "COP_VERIFIED"     # Step 7-9: Confirmation of Payee completed
+    SANCTIONS_CHECKED = "SANCTIONS_CHECKED"  # Step 10-11: Screening passed
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"  # Step 12: Awaiting sender approval
+    CONFIRMED = "CONFIRMED"           # Step 12: Sender confirmed
+    SUBMITTED = "SUBMITTED"           # Step 14-15: pacs.008 sent to IPS
+    ACCEPTED = "ACCEPTED"             # Step 16: Received ACCC status
+    REJECTED = "REJECTED"             # Step 16: Received RJCT status
+    SETTLED = "SETTLED"               # Step 17: camt.054 received
+
 class StatusReasonCode(str, Enum):
-    """ISO 20022 status reason codes."""
-    AB03 = "AB03"  # Account blocked
-    AB04 = "AB04"  # Account closed
-    TM01 = "TM01"  # Timeout
-    AC04 = "AC04"  # Account closed
-    AC06 = "AC06"  # Account blocked
-    AM04 = "AM04"  # Insufficient funds
+    """ISO 20022 status reason codes per Nexus documentation."""
+    # Abort/Timeout codes
+    AB01 = "AB01"  # Aborted Clearing Timeout
+    AB03 = "AB03"  # Aborted Settlement Timeout
+    AB04 = "AB04"  # Aborted Settlement Fatal Error
+    AB05 = "AB05"  # Timeout Creditor Agent
+    AB06 = "AB06"  # Timeout Instructed Agent
+    AB08 = "AB08"  # Offline Creditor Agent
+    TM01 = "TM01"  # Invalid Cut Off Time
+    # Account codes
+    AC01 = "AC01"  # Incorrect Account Number
+    AC04 = "AC04"  # Closed Account Number
+    AC06 = "AC06"  # Blocked Account
+    # Amount codes
     AM02 = "AM02"  # Amount not allowed
-    RR04 = "RR04"  # Regulatory reason
+    AM04 = "AM04"  # Insufficient funds
+    # Regulatory/Fraud codes
+    RR04 = "RR04"  # Regulatory/AML Block
     FR01 = "FR01"  # Fraud suspected
-    RC11 = "RC11"  # Invalid creditor
-    AGNT = "AGNT"  # Agent incorrect
-    BE23 = "BE23"  # Beneficiary error
-    DUPL = "DUPL"  # Duplicate reference
+    FRAD = "FRAD"  # Fraudulent Origin
+    MD07 = "MD07"  # End Customer Deceased
+    # Agent/Validation codes
+    AGNT = "AGNT"  # Incorrect Agent
+    RC07 = "RC07"  # Invalid Creditor Reference
+    RC11 = "RC11"  # Invalid Intermediary Agent
+    BE23 = "BE23"  # Account Proxy Invalid
+    DUPL = "DUPL"  # Duplicate Payment
+    CH21 = "CH21"  # Required Element Missing
+    FF01 = "FF01"  # File Format Error
 
 class StatusReasonDetail(BaseModel):
     """Status reason details per ISO 20022."""

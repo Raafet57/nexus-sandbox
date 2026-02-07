@@ -97,7 +97,7 @@ const ISO_TEMPLATES: Record<string, IsoMessageTemplate> = {
         <Acct>
           <Id><Othr><Id>0987654321</Id></Othr></Id>
         </Acct>
-        <Agt><FinInstnId><BICFI>BKKBTHBK</BICFI></FinInstnId></Agt>
+        <Agt><FinInstnId><BICFI>KASITHBK</BICFI></FinInstnId></Agt>
       </UpdtdPtyAndAcctId>
     </Rpt>
   </IdVrfctnRpt>
@@ -184,7 +184,7 @@ const ISO_TEMPLATES: Record<string, IsoMessageTemplate> = {
     </GrpHdr>
     <TxInf>
       <OrgnlUETR>91398cbd-0838-453f-b2c7-536e829f2b8e</OrgnlUETR>
-      <InstgAgt><FinInstnId><BICFI>DBSGSGSG</BICFI></FinInstnId></InstgAgt>
+      <InstgAgt><FinInstnId><BICFI>DBSSSGSG</BICFI></FinInstnId></InstgAgt>
     </TxInf>
   </FIToFIPmtStsReq>
 </Document>`,

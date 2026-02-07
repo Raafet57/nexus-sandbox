@@ -23,13 +23,15 @@ This document provides step-by-step instructions for demonstrating the complete 
 ### Step 1: View Registered Actors
 
 1. Navigate to **Actors** page from sidebar
-2. Observe 6 pre-seeded actors:
-   - `DBSGSGSG` (PSP - DBS Singapore)
-   - `BKKBTHBK` (PSP - Bangkok Bank)
-   - `MAYBMYKL` (PSP - Maybank Malaysia)
-   - `NEXUSFXP1` (FXP - Nexus FXP Alpha)
-   - `SGIPSOPS` (IPS - Singapore FAST)
-   - `THIPSOPS` (IPS - Thailand PromptPay)
+2. Observe 7+ pre-seeded actors:
+   - `DBSSSGSG` (PSP - DBS Singapore)
+   - `KASITHBK` (PSP - Kasikorn Bank Thailand)
+   - `MABORKKL` (PSP - Maybank Malaysia)
+   - `FXP-ABC` (FXP - ABC Currency Exchange)
+   - `DBSSSGSG` (SAP - DBS Singapore)
+   - `FAST` (IPS - Singapore FAST)
+   - `PromptPay` (IPS - Thailand PromptPay)
+   - Plus: Philippines, Indonesia, India actors
 
 **Expected**: All actors show status `ACTIVE`
 
@@ -60,7 +62,7 @@ POST /v1/addressing/resolve
 {
   "resolutionId": "...",
   "accountNumber": "0123456789",
-  "agentBic": "BKKBTHBK",
+  "agentBic": "KASITHBK",
   "beneficiaryName": "Somchai Thai",
   "status": "VALIDATED"
 }
@@ -71,63 +73,116 @@ POST /v1/addressing/resolve
 ### Step 3: FX Quote (camt.030 equivalent)
 
 1. Enter Amount: **1000 SGD**
-2. Click **Get Quote**
+2. Select **Fee Type**:
+   - **INVOICED**: Fee added on top, recipient gets full amount
+   - **DEDUCTED**: Fee deducted from transfer, recipient gets less
+3. Click **Get Quote**
 
 **API Call**:
 ```bash
-GET /v1/quotes?sourceCountry=SG&destCountry=TH&sourceCurrency=SGD&destCurrency=THB&amount=1000&amountType=SOURCE
+GET /v1/quotes/SG/SGD/TH/THB/SGD/1000
 ```
 
 **Expected Response**:
 ```json
 {
-  "quoteId": "quote-uuid",
-  "rate": 25.50,
-  "sourceAmount": 1000.00,
-  "destAmount": 25500.00,
-  "fxpName": "Nexus FXP Alpha",
-  "validUntil": "2026-02-03T15:10:00.000Z",
-  "fees": { "nexusFee": 0.50, "sourcePspFee": 1.00 }
+  "quotes": [{
+    "quoteId": "quote-uuid",
+    "fxpName": "Nexus FXP Alpha",
+    "exchangeRate": "25.50",
+    "sourceInterbankAmount": "1000.00",
+    "destinationInterbankAmount": "25500.00",
+    "expiresAt": "2026-02-03T15:10:00.000Z"
+  }]
 }
 ```
 
+**Note**: Fee type affects the total cost:
+- INVOICED: Total = Principal + Fee
+- DEDUCTED: Total = Principal (recipient gets Principal - Fee converted)
+
 ---
 
-### Step 4: Pre-Transaction Disclosure
+### Step 4: Pre-Transaction Disclosure & Intermediary Agents
 
 1. Review the disclosure breakdown:
-   - Exchange Rate
-   - Fees (Nexus, PSP, FXP)
+   - Exchange Rate (market vs customer rate)
+   - Fees (Nexus scheme fee, PSP fees)
    - Total amount receiver gets
-   - Estimated completion time
-2. Click **Accept Quote**
+   - Applied spread in basis points
+   
+2. View **Intermediary Agents** (Step 13):
+   - Source SAP BIC (e.g., `DBSSSGSG`)
+   - Destination SAP BIC (e.g., `BBLTHBK`)
+   - Routing path visualization
+
+3. Click **Accept Quote**
+
+**API Calls**:
+```bash
+# Get fee breakdown
+GET /v1/fees-and-amounts?quoteId={quoteId}&sourceFeeType=INVOICED
+
+# Get intermediary agents
+GET /v1/quotes/{quoteId}/intermediary-agents
+```
 
 ---
 
 ### Step 5: Payment Execution (pacs.008)
 
-1. Enter Sender details
-2. Click **Confirm & Send**
+1. Review **Sanctions Screening** section (Steps 10-11):
+   - Enter recipient address (if required by corridor)
+   - Enter date of birth (if required)
+   - Enter national ID (if required)
+
+2. Enter **Payment Reference** (Step 12):
+   - Optional message to recipient (max 140 chars)
+   - Stored in `RmtInf/Strd/CdtrRefInf/Ref`
+
+3. Select **Instruction Priority**:
+   - **HIGH**: 25-second timeout (urgent)
+   - **NORM**: 4-hour timeout (standard)
+
+4. Check **Explicit Confirmation** checkbox
+
+5. Click **Confirm & Send**
 
 **ISO Message Lifecycle**:
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 1. PSP (DBSGSGSG) → IPS-SG → NEXUS GATEWAY                 │
-│    pacs.008 with InstgAgt=DBSGSGSG, InstdAgt=SGIPSOPS      │
+│ 1. PSP (DBSSSGSG) → IPS-SG → NEXUS GATEWAY                 │
+│    pacs.008 with:                                          │
+│    - InstgAgt=DBSSSGSG, InstdAgt=FAST                  │
+│    - AccptncDtTm (Acceptance Date Time)                    │
+│    - InstrPrty (HIGH/NORM)                                 │
+│    - ClrSys (SGFAST)                                       │
+│    - IntrmyAgt1 (Source SAP BIC)                           │
+│    - IntrmyAgt2 (Dest SAP BIC)                             │
+│    - RmtInf (Payment Reference)                            │
 ├─────────────────────────────────────────────────────────────┤
 │ 2. NEXUS GATEWAY transform_pacs008():                       │
-│    - InstgAgt: DBSGSGSG → THIPSOPS (Dest IPS)              │
-│    - InstdAgt: SGIPSOPS → BKKBTHBK (Dest PSP)              │
-│    - PrvsInstgAgt1: SGIPSOPS (audit trail)                 │
+│    - InstgAgt: DBSSSGSG → PromptPay (Dest IPS)              │
+│    - InstdAgt: FAST → KASITHBK (Dest PSP)              │
+│    - PrvsInstgAgt1: FAST (audit trail)                 │
 │    - IntrBkSttlmAmt: 1000 SGD → 25500 THB                  │
 ├─────────────────────────────────────────────────────────────┤
-│ 3. NEXUS GATEWAY → IPS-TH → PSP (BKKBTHBK)                 │
+│ 3. NEXUS GATEWAY → IPS-TH → PSP (KASITHBK)                 │
 │    Transformed pacs.008 with Thai currency/agents           │
 ├─────────────────────────────────────────────────────────────┤
 │ 4. IPS-TH → NEXUS → IPS-SG → PSP                           │
 │    pacs.002 with Status=ACCC (Accepted Settlement Completed)│
+│    + HMAC-SHA256 signature for callback authentication      │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Mandatory Fields in pacs.008.001.13**:
+- `AccptncDtTm` - ISO 8601 timestamp
+- `InstrPrty` - HIGH (25s) or NORM (4hr)
+- `ClrSys/Prtry` - Clearing system code
+- `IntrmyAgt1` - Source SAP
+- `IntrmyAgt2` - Destination SAP
+- `RmtInf/Strd/CdtrRefInf/Ref` - Payment reference
 
 ---
 

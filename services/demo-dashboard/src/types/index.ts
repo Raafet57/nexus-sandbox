@@ -48,6 +48,9 @@ export interface Quote {
     destinationCurrency: string;
     exchangeRate: string;
     spreadBps: number;
+    baseRate?: number;           // Base FX rate before improvements
+    tierImprovementBps?: number; // Tier-based rate improvement
+    pspImprovementBps?: number;  // PSP-specific rate improvement
     sourceInterbankAmount: string;
     destinationInterbankAmount: string;
     creditorAccountAmount?: string;
@@ -98,6 +101,7 @@ export interface ProxyResolutionResult {
     verified: boolean;
     error?: string;
     errorMessage?: string;
+    statusReasonCode?: string;  // ISO 20022 status reason code (e.g., BE23, AC04)
     timestamp?: string;
 }
 
@@ -155,6 +159,8 @@ export interface IntermediaryAgentAccount {
     bic: string;          // BIC of the SAP (e.g., FASTSGS0)
     accountNumber: string; // FXP account at SAP
     name: string;         // SAP name
+    fxpId?: string;       // FXP ID (for SAP accounts)
+    fxpName?: string;     // FXP Name (for SAP accounts)
 }
 
 export interface IntermediaryAgentsResponse {
@@ -218,4 +224,40 @@ export interface AddressTypeWithInputs {
     // For Select compatibility
     value?: string;
     label?: string;
+}
+
+export interface ActorRegistration {
+    name: string;
+    actorType: string; // FXP, IPS, PSP, SAP, PDO
+    countryCode: string;
+    bic: string;
+    callbackUrl?: string;
+    supportedCurrencies?: string[];
+}
+
+export interface Actor {
+    actorId: string;
+    name: string;
+    actorType: string;
+    countryCode: string;
+    bic: string;
+    callbackUrl?: string;
+    registeredAt: string;
+    status: string;
+    supportedCurrencies?: string[];
+}
+
+export interface SenderConfirmationRequest {
+    quoteId: string;
+    sourceCountry: string;
+    destinationCountry: string;
+    sourcePspBic: string;
+}
+
+export interface SenderConfirmationResponse {
+    quoteId: string;
+    confirmationStatus: string;
+    confirmationTimestamp: string;
+    proceedToExecution: boolean;
+    message: string;
 }

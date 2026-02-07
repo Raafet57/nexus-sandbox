@@ -79,7 +79,6 @@ const LIFECYCLE_STEPS = [
 const STATUS_CODES: Record<string, { description: string; color: string }> = {
     ACCC: { description: "Settlement Completed", color: "green" },
     ACSP: { description: "Settlement in Progress", color: "blue" },
-    ACCP: { description: "Accepted Customer Profile", color: "cyan" },
     RJCT: { description: "Rejected", color: "red" },
     PDNG: { description: "Pending", color: "yellow" },
     AB03: { description: "Timeout - Aborted", color: "orange" },

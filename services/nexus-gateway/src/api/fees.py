@@ -15,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db import get_db
+from .fee_config import get_source_fee_type, FeeType
 
 
 router = APIRouter()
@@ -47,7 +48,7 @@ def _assert_fee_invariants(
     effective_rate: Decimal,
     customer_rate: Decimal,
     market_rate: Decimal,
-    tolerance: Decimal = Decimal("0.02")
+    tolerance: Decimal = Decimal("0.01")  # Standardized to 0.01 (consistent with fee_formulas.py)
 ) -> None:
     """
     Assert ADR-012 invariants for fee calculations.
@@ -123,6 +124,11 @@ async def calculate_fees_and_amounts(
         alias="destinationPspBic",
         description="BIC of the destination PSP (to lookup fees)",
     ),
+    source_fee_type: FeeType | None = Query(
+        None,
+        alias="sourceFeeType",
+        description="Source PSP fee type: DEDUCTED (from principal) or INVOICED (charged separately)",
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Calculate fees and amounts for a payment (Query Params)."""
@@ -130,7 +136,8 @@ async def calculate_fees_and_amounts(
         quote_id=quote_id,
         source_psp_bic=source_psp_bic,
         destination_psp_bic=destination_psp_bic,
-        db=db
+        db=db,
+        source_fee_type=source_fee_type
     )
 
 
@@ -141,11 +148,11 @@ async def calculate_fees_and_amounts(
     description="Calculate fees for Source PSPs providing their own FX (no quote ID)."
 )
 async def calculate_fees_path_params(
-    source_country: str = Path(..., alias="sourceCountry"),
-    source_currency: str = Path(..., alias="sourceCurrency"),
-    destination_country: str = Path(..., alias="destinationCountry"),
-    destination_currency: str = Path(..., alias="destinationCurrency"),
-    amount_currency: str = Path(..., alias="amountCurrency"),
+    source_country: str = Path(...),
+    source_currency: str = Path(...),
+    destination_country: str = Path(...),
+    destination_currency: str = Path(...),
+    amount_currency: str = Path(...),
     amount: float = Path(..., gt=0),
     exchange_rate: Optional[float] = Query(None, alias="exchangeRate"),
     db: AsyncSession = Depends(get_db),
@@ -207,12 +214,132 @@ async def get_creditor_agent_fee(
     )
 
 
+# =============================================================================
+# Step 12 Sender Confirmation Gate (Per Documentation)
+# =============================================================================
+
+from pydantic import BaseModel
+
+
+class SenderConfirmationRequest(BaseModel):
+    """Request body for sender confirmation (Step 12)."""
+    quoteId: str
+    confirmedByDebtor: bool = True
+    debtorName: str | None = None
+    debtorAccount: str | None = None
+
+
+class SenderConfirmationResponse(BaseModel):
+    """Response confirming sender has approved the transaction."""
+    quoteId: str
+    confirmationStatus: str
+    confirmationTimestamp: str
+    proceedToExecution: bool
+    message: str
+
+
+@router.post(
+    "/fees/sender-confirmation",
+    response_model=SenderConfirmationResponse,
+    summary="Confirm Pre-Transaction Disclosure (Step 12)",
+    description="""
+    **Step 12: Sender Approval Gate**
+    
+    Records the sender's explicit confirmation after viewing the Pre-Transaction Disclosure.
+    
+    This endpoint should be called AFTER the PSP has displayed:
+    1. Source Currency Amount (amount debited from sender)
+    2. Destination Currency Amount (amount credited to recipient)
+    3. Exchange Rate (effective rate)
+    4. Fees charged by Source PSP
+    
+    Per documentation, the sender MUST explicitly confirm before proceeding to pacs.008 submission.
+    
+    Reference: https://docs.nexusglobalpayments.org/payment-processing/fees#transparency-requirements
+    """
+)
+async def confirm_sender_approval(
+    request: SenderConfirmationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> SenderConfirmationResponse:
+    """
+    Record sender's explicit confirmation of Pre-Transaction Disclosure.
+    
+    This is the Step 12 gate - must be called before proceeding to Steps 13-16.
+    """
+    from datetime import datetime, timezone
+    
+    if not request.confirmedByDebtor:
+        return SenderConfirmationResponse(
+            quoteId=request.quoteId,
+            confirmationStatus="REJECTED",
+            confirmationTimestamp=datetime.now(timezone.utc).isoformat(),
+            proceedToExecution=False,
+            message="Sender has not confirmed the transaction. Cannot proceed."
+        )
+    
+    # Validate quote exists and is still active
+    quote_query = text("""
+        SELECT quote_id, status, expires_at 
+        FROM quotes 
+        WHERE quote_id = CAST(:quote_id AS uuid)
+    """)
+    
+    result = await db.execute(quote_query, {"quote_id": request.quoteId})
+    quote = result.fetchone()
+    
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    if quote.status != "ACTIVE":
+        raise HTTPException(status_code=410, detail="Quote is no longer active")
+    
+    confirmation_time = datetime.now(timezone.utc)
+    
+    if quote.expires_at < confirmation_time:
+        raise HTTPException(status_code=410, detail="Quote has expired")
+    
+    # Store confirmation event for audit trail
+    event_query = text("""
+        INSERT INTO payment_events (
+            event_id, uetr, event_type, event_data, occurred_at
+        ) VALUES (
+            gen_random_uuid(), 
+            :quote_id, 
+            'SENDER_CONFIRMATION',
+            :event_data,
+            NOW()
+        )
+    """)
+    
+    import json
+    await db.execute(event_query, {
+        "quote_id": request.quoteId,
+        "event_data": json.dumps({
+            "confirmedByDebtor": request.confirmedByDebtor,
+            "debtorName": request.debtorName,
+            "step": 12,
+            "description": "Pre-Transaction Disclosure confirmed by sender"
+        })
+    })
+    await db.commit()
+    
+    return SenderConfirmationResponse(
+        quoteId=request.quoteId,
+        confirmationStatus="CONFIRMED",
+        confirmationTimestamp=confirmation_time.isoformat(),
+        proceedToExecution=True,
+        message="Sender has confirmed. Proceed to Step 13 (Get Intermediary Agents)."
+    )
+
+
 # Internal Logic
 async def _calculate_fees_logic(
     quote_id: str,
     source_psp_bic: str | None,
     destination_psp_bic: str | None,
     db: AsyncSession,
+    source_fee_type: FeeType | None = None,
 ) -> dict[str, Any]:
     """
     Shared calculation logic returning PreTransactionDisclosureResponse format.
@@ -283,7 +410,22 @@ async def _calculate_fees_logic(
     source_psp_fee = (sender_principal * source_fee_percent).quantize(Decimal("0.01"))
     scheme_fee = (sender_principal * Decimal("0.001")).quantize(Decimal("0.01"))  # 0.1% scheme fee
     scheme_fee = max(scheme_fee, Decimal("0.10"))  # Minimum 0.10
-    sender_total = sender_principal + source_psp_fee + scheme_fee
+    
+    # Determine fee type: use query param if provided, else lookup from config
+    if source_fee_type:
+        fee_type = source_fee_type
+    else:
+        # In a real implementation, this would come from PSP configuration
+        source_country = quote.source_currency[:2] if len(quote.source_currency) >= 2 else "US"
+        fee_type = get_source_fee_type(source_country)
+    
+    # Calculate sender total based on fee type
+    # DEDUCTED: PSP fee comes out of principal, sender pays principal + scheme fee
+    # INVOICED: PSP fee charged separately, sender pays principal + scheme fee + PSP fee
+    if fee_type == "INVOICED":
+        sender_total = sender_principal + source_psp_fee + scheme_fee
+    else:
+        sender_total = sender_principal + scheme_fee
     
     # Destination-side fees (use quote's stored value if available per ADR-012)
     if quote.stored_dest_fee is not None:
@@ -351,7 +493,7 @@ async def _calculate_fees_logic(
         # Source (sender)
         "senderPrincipal": str(sender_principal),
         "sourcePspFee": str(source_psp_fee),
-        "sourcePspFeeType": "DEDUCTED",
+        "sourcePspFeeType": fee_type,
         "schemeFee": str(scheme_fee),
         "senderTotal": str(sender_total),
         "sourceCurrency": quote.source_currency,

@@ -132,7 +132,7 @@ def can_submit_payment(psp, payment):
 | `quotes:read` | Read FX quotes | `GET /quotes`, `GET /quotes/{id}` |
 | `quotes:intermediary` | Read intermediary agents | `GET /quotes/{id}/intermediary-agents` |
 | `payments:submit` | Submit payments | `POST /payments` (via IPS) |
-| `proxy:resolve` | Resolve proxies | `POST /proxy/resolve` |
+| `proxy:resolve` | Resolve proxies | `POST /v1/addressing/resolve` |
 | `fees:read` | Read fee calculations | `GET /fees-and-amounts` |
 | `rates:write` | Submit FX rates | `POST /rates` |
 | `rates:delete` | Withdraw FX rates | `DELETE /rates` |

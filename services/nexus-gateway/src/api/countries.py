@@ -125,7 +125,6 @@ async def retrieve_single_country(
     country_code: str = Path(
         ...,
         description="ISO 3166-1 alpha-2 country code",
-        alias="countryCode",
         min_length=2,
         max_length=2,
         pattern="^[A-Z]{2}$",
@@ -181,7 +180,7 @@ async def retrieve_single_country(
 
 
 @router.get(
-    "/countries/{country_code}/psps",
+    "/countries/{country_code}/fin-inst/psps",
     response_model=FinancialInstitutionsResponse,
     summary="Retrieve PSPs in Country",
     description="""
@@ -191,13 +190,14 @@ async def retrieve_single_country(
     
     PSPs are banks and payment apps that participate in Nexus
     as senders or receivers of payments.
+    
+    **Path:** `/countries/{countryCode}/fin-inst/psps` (per official Nexus documentation)
     """,
 )
 async def retrieve_country_psps(
     country_code: str = Path(
         ...,
         description="ISO 3166-1 alpha-2 country code",
-        alias="countryCode",
         min_length=2,
         max_length=2,
     ),
@@ -234,6 +234,19 @@ async def retrieve_country_psps(
 
 
 @router.get(
+    "/countries/{country_code}/psps",
+    response_model=FinancialInstitutionsResponse,
+    include_in_schema=False,  # Hide from docs, keep for backward compatibility
+)
+async def retrieve_country_psps_alias(
+    country_code: str = Path(..., min_length=2, max_length=2),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Backward-compatible alias for /fin-inst/psps."""
+    return await retrieve_country_psps(country_code, db)
+
+
+@router.get(
     "/countries/{country_code}/address-types",
     response_model=AddressTypesResponse,
     summary="Retrieve Address Types",
@@ -253,7 +266,6 @@ async def retrieve_address_types(
     country_code: str = Path(
         ...,
         description="ISO 3166-1 alpha-2 country code",
-        alias="countryCode",
         min_length=2,
         max_length=2,
     ),
@@ -268,7 +280,7 @@ async def retrieve_address_types(
             requires_proxy_resolution
         FROM address_types
         WHERE country_code = :country_code
-        ORDER BY display_order, code
+        ORDER BY code
     """)
     
     result = await db.execute(query, {"country_code": country_code.upper()})
@@ -292,7 +304,7 @@ async def retrieve_address_types(
     include_in_schema=False,
 )
 async def retrieve_address_types_alias(
-    country_code: str = Path(..., alias="countryCode", min_length=2, max_length=2),
+    country_code: str = Path(..., min_length=2, max_length=2),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -315,8 +327,8 @@ async def retrieve_address_types_alias(
     """,
 )
 async def retrieve_max_amounts(
-    country_code: str = Path(..., alias="countryCode", min_length=2, max_length=2),
-    currency_code: str = Path(..., alias="currencyCode", min_length=3, max_length=3),
+    country_code: str = Path(..., min_length=2, max_length=2),
+    currency_code: str = Path(..., min_length=3, max_length=3),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get max amount for a currency in a country."""
@@ -364,7 +376,7 @@ class UpdateCountryRequest(BaseModel):
 )
 async def update_country(
     body: UpdateCountryRequest,
-    country_code: str = Path(..., alias="countryCode", min_length=2, max_length=2),
+    country_code: str = Path(..., min_length=2, max_length=2),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Update country configuration."""

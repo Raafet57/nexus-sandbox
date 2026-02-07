@@ -27,8 +27,15 @@ router = APIRouter()
 
 
 # =============================================================================
-# Fee Calculation Functions (Single Source of Truth)
+# Fee Calculation Functions (Import from Centralized fee_config.py)
 # =============================================================================
+
+from .fee_config import (
+    calculate_destination_psp_fee as _calc_dest_fee,
+    calculate_source_psp_fee as _calc_source_fee,
+    calculate_scheme_fee as _calc_scheme_fee,
+)
+
 
 def _calculate_destination_psp_fee(amount: Decimal, currency: str) -> Decimal:
     """
@@ -37,28 +44,19 @@ def _calculate_destination_psp_fee(amount: Decimal, currency: str) -> Decimal:
     
     Reference: https://docs.nexusglobalpayments.org/fees-and-pricing
     """
-    fee_structures = {
-        "SGD": {"fixed": Decimal("0.50"), "percent": Decimal("0.001"), "min": Decimal("0.50"), "max": Decimal("5.00")},
-        "THB": {"fixed": Decimal("10.00"), "percent": Decimal("0.001"), "min": Decimal("10.00"), "max": Decimal("100.00")},
-        "MYR": {"fixed": Decimal("1.00"), "percent": Decimal("0.001"), "min": Decimal("1.00"), "max": Decimal("10.00")},
-        "PHP": {"fixed": Decimal("25.00"), "percent": Decimal("0.002"), "min": Decimal("25.00"), "max": Decimal("250.00")},
-        "IDR": {"fixed": Decimal("500"), "percent": Decimal("0.001"), "min": Decimal("500"), "max": Decimal("50000")},
-        "INR": {"fixed": Decimal("25.00"), "percent": Decimal("0.001"), "min": Decimal("25.00"), "max": Decimal("250.00")},
-    }
-    
-    struct = fee_structures.get(currency, {"fixed": Decimal("1.00"), "percent": Decimal("0.001"), "min": Decimal("1.00"), "max": Decimal("10.00")})
-    
-    calculated = struct["fixed"] + amount * struct["percent"]
-    return max(struct["min"], min(struct["max"], calculated))
+    fee, _ = _calc_dest_fee(amount, currency)
+    return fee
 
 
-def _calculate_source_psp_fee(principal: Decimal) -> Decimal:
+def _calculate_source_psp_fee(principal: Decimal, currency: str = "SGD") -> Decimal:
     """
-    Calculate source PSP fee.
-    Fee structure: 0.50 SGD fixed + 0.1% of principal, min 0.50, max 10.00
+    Calculate source PSP fee with currency context.
+    
+    Args:
+        principal: Amount in source currency
+        currency: Source currency code (uses appropriate fee structure)
     """
-    calculated = Decimal("0.50") + principal * Decimal("0.001")
-    return max(Decimal("0.50"), min(Decimal("10.00"), calculated))
+    return _calc_source_fee(principal, currency)
 
 
 def _calculate_scheme_fee(principal: Decimal) -> Decimal:
@@ -66,8 +64,7 @@ def _calculate_scheme_fee(principal: Decimal) -> Decimal:
     Calculate Nexus scheme fee.
     Fee structure: 0.10 SGD fixed + 0.05% of principal, min 0.10, max 5.00
     """
-    calculated = Decimal("0.10") + principal * Decimal("0.0005")
-    return max(Decimal("0.10"), min(Decimal("5.00"), calculated))
+    return _calc_scheme_fee(principal)
 
 
 # =============================================================================
@@ -307,30 +304,37 @@ async def get_quotes(
         # =================================================================
         # CALCULATE ALL FEES AT QUOTE TIME (Single Source of Truth)
         # =================================================================
-        
+
         if amount_type == "DESTINATION":
             # User specifies NET amount recipient should receive
             creditor_account_amount = amount  # This is what recipient gets NET
-            
+
             # Calculate destination fee on net amount, then gross up
             dest_psp_fee = _calculate_destination_psp_fee(creditor_account_amount, dest_currency)
             dest_interbank_amount = creditor_account_amount + dest_psp_fee  # Gross
-            
+
             # Calculate source principal from gross payout
             source_interbank_amount = dest_interbank_amount / customer_rate
-            
+
+            # For DESTINATION quotes, calculate what the source fee WOULD be (for disclosure)
+            source_psp_fee = _calculate_source_psp_fee(source_interbank_amount, source_currency)
+
         else:  # SOURCE
-            # User specifies total to DEBIT (we need to work backwards)
-            # For simplicity, treat source amount as interbank amount (fees added separately in PTD)
-            source_interbank_amount = amount
+            # User specifies DebtorAccountAmount (total to DEBIT from sender)
+            # Per Nexus spec: "Source PSP should request the quote amount after deducting its own fee"
+            # Reference: docs.nexusglobalpayments.org/fees-and-pricing
+            debtor_account_amount = amount
+
+            # Calculate and DEDUCT source PSP fee first
+            source_psp_fee = _calculate_source_psp_fee(debtor_account_amount, source_currency)
+            source_interbank_amount = debtor_account_amount - source_psp_fee
+
+            # Now calculate destination side from the net interbank amount
             dest_interbank_amount = source_interbank_amount * customer_rate
-            
+
             # Calculate destination fee and net to recipient
             dest_psp_fee = _calculate_destination_psp_fee(dest_interbank_amount, dest_currency)
             creditor_account_amount = dest_interbank_amount - dest_psp_fee
-        
-        # Calculate source-side fees (for disclosure, not deducted from interbank)
-        source_psp_fee_calc = _calculate_source_psp_fee(source_interbank_amount)
         scheme_fee_calc = _calculate_scheme_fee(source_interbank_amount)
         
         # Check and apply capping
@@ -358,6 +362,7 @@ async def get_quotes(
         dest_interbank_amount = dest_interbank_amount.quantize(Decimal("0.01"))
         creditor_account_amount = creditor_account_amount.quantize(Decimal("0.01"))
         dest_psp_fee = dest_psp_fee.quantize(Decimal("0.01"))
+        source_psp_fee = source_psp_fee.quantize(Decimal("0.01"))
         
         # Store quote in database WITH ALL FEES
         insert_query = text("""
@@ -401,14 +406,20 @@ async def get_quotes(
         })
         
         # Include ALL fee fields in response per Nexus spec
+        # Added baseRate and improvement fields per EXTENSIVE_PARITY_REVIEW_REPORT.md
+        # Added sourcePspFee per issue C1 fix
         quotes.append({
             "quoteId": str(quote_id),
             "fxpId": row.fxp_code,
             "fxpName": row.fxp_name,
+            "baseRate": str(base_rate.quantize(Decimal("0.00000001"))),
             "exchangeRate": str(customer_rate.quantize(Decimal("0.00000001"))),
+            "tierImprovementBps": int(tier_improvement_bps),
+            "pspImprovementBps": int(psp_improvement_bps),
             "sourceInterbankAmount": str(source_interbank_amount),
             "destinationInterbankAmount": str(dest_interbank_amount),
             "creditorAccountAmount": str(creditor_account_amount),
+            "sourcePspFee": str(source_psp_fee),
             "destinationPspFee": str(dest_psp_fee),
             "cappedToMaxAmount": capped,
             "expiresAt": expires_at.isoformat().replace("+00:00", "Z"),
@@ -430,7 +441,7 @@ async def get_quotes(
     """,
 )
 async def retrieve_single_quote(
-    quote_id: UUID = Path(..., alias="quoteId", description="Quote ID"),
+    quote_id: UUID = Path(..., description="Quote ID"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get a specific quote by ID."""
@@ -460,7 +471,7 @@ async def retrieve_single_quote(
     if row.status != "ACTIVE":
         raise HTTPException(status_code=410, detail="Quote has expired or been used")
     
-    if row.expires_at < datetime.utcnow():
+    if row.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=410, detail="Quote has expired")
     
     return {
@@ -492,7 +503,7 @@ async def retrieve_single_quote(
     """,
 )
 async def accept_quote(
-    quote_id: UUID = Path(..., alias="quoteId", description="Quote ID"),
+    quote_id: UUID = Path(..., description="Quote ID"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get intermediary agent details for a quote."""
@@ -522,17 +533,28 @@ async def accept_quote(
         # Reference: https://docs.nexusglobalpayments.org/payment-setup/step-13-request-intermediary-agents
         return {
             "quoteId": str(quote_id),
+            # Added fxpId, fxpName, clearingSystemId per EXTENSIVE_PARITY_REVIEW_REPORT.md
+            "fxpId": "NEXUSFXP",
+            "fxpName": "Nexus Default FXP",
             "intermediaryAgent1": {
                 "agentRole": "SOURCE_SAP",
-                "bic": "FASTSGS0",  # Singapore FAST SAP
-                "accountNumber": "SG12345678901234",
-                "name": "Singapore FAST SAP",
+                "sapId": "SINGAPOREFAST",
+                "sapName": "Singapore FAST SAP",
+                "sapBicfi": "FASTSGS0",
+                "accountId": "SG12345678901234",
+                "accountType": "CACC",
+                "currency": "SGD",
+                "clearingSystemId": "SGFAST",
             },
             "intermediaryAgent2": {
                 "agentRole": "DESTINATION_SAP",
-                "bic": "PPAYTH2B",  # Thailand PromptPay SAP
-                "accountNumber": "TH98765432109876",
-                "name": "Thailand PromptPay SAP",
+                "sapId": "THAILANDPP",
+                "sapName": "Thailand PromptPay SAP",
+                "sapBicfi": "PPAYTH2B",
+                "accountId": "TH98765432109876",
+                "accountType": "CACC",
+                "currency": "THB",
+                "clearingSystemId": "THPP",
             },
         }
     
@@ -570,19 +592,35 @@ async def accept_quote(
     source_account = accounts[quote.source_currency]
     dest_account = accounts[quote.destination_currency]
     
+    # Get FXP details
+    fxp_query = text("SELECT fxp_code, name FROM fxps WHERE fxp_id = :fxp_id")
+    fxp_result = await db.execute(fxp_query, {"fxp_id": quote.fxp_id})
+    fxp = fxp_result.fetchone()
+    
     return {
         "quoteId": str(quote_id),
+        # Added per EXTENSIVE_PARITY_REVIEW_REPORT.md
+        "fxpId": fxp.fxp_code if fxp else "UNKNOWN",
+        "fxpName": fxp.name if fxp else "Unknown FXP",
         "intermediaryAgent1": {
             "agentRole": "SOURCE_SAP",
-            "bic": source_account.bic,
-            "accountNumber": source_account.account_number,
-            "name": source_account.name,
+            "sapId": f"{source_account.country_code}SAP",
+            "sapName": source_account.name,
+            "sapBicfi": source_account.bic,
+            "accountId": source_account.account_number,
+            "accountType": "CACC",
+            "currency": quote.source_currency,
+            "clearingSystemId": f"{source_account.country_code}RTGS",
         },
         "intermediaryAgent2": {
             "agentRole": "DESTINATION_SAP",
-            "bic": dest_account.bic,
-            "accountNumber": dest_account.account_number,
-            "name": dest_account.name,
+            "sapId": f"{dest_account.country_code}SAP",
+            "sapName": dest_account.name,
+            "sapBicfi": dest_account.bic,
+            "accountId": dest_account.account_number,
+            "accountType": "CACC",
+            "currency": quote.destination_currency,
+            "clearingSystemId": f"{dest_account.country_code}RTGS",
         },
     }
 

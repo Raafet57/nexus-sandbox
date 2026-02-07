@@ -1,43 +1,21 @@
-# Python
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
-.pytest_cache/
-.hypothesis/
+*.so
+.Python
+env/
+venv/
+.venv/
 *.egg-info/
 dist/
 build/
-
-# Virtual environments
-.venv/
-venv/
-env/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# Testing
+.git
+*.md
+.env
+.env.local
+.env.*.local
+.pytest_cache
 .coverage
 htmlcov/
 .tox/
-
-# Local development
-*.log
-.env.local
-.env.development
-
-# Git
-.git/
-.gitignore
-
-# Documentation
-docs/
-*.md
-!README.md
-
-# Lock files (for reproducibility use requirements.txt in prod)
-uv.lock
-poetry.lock
+.DS_Store

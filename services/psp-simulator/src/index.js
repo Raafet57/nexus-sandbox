@@ -158,47 +158,7 @@ app.post('/demo/initiate-payment', async (req, res) => {
         logger.info({ uetr }, 'Initiating payment');
 
         // =================================================================
-        // Step 7-9: Confirmation of Payee (CoP) - Proxy Resolution
-        // Reference: NotebookLM - POST /iso20022/acmt023
-        // =================================================================
-        logger.info('Step 7-9: Confirmation of Payee (CoP)');
-
-        let creditorName, creditorAccount;
-
-        if (creditorIdentifierType === 'ACCT') {
-            // Direct account number - no resolution needed
-            creditorAccount = creditorIdentifier;
-            creditorName = req.body.creditorName || 'Unknown Recipient';
-        } else {
-            // Proxy resolution required (mobile, email, etc.)
-            try {
-                const copResponse = await resolveProxy({
-                    proxyType: creditorIdentifierType,
-                    proxyValue: creditorIdentifier,
-                    destinationCountry: creditorCountry,
-                    senderIdHash,
-                });
-
-                creditorName = copResponse.displayName;
-                creditorAccount = copResponse.accountNumber;
-
-                logger.info({
-                    proxyType: creditorIdentifierType,
-                    displayName: creditorName,
-                }, 'CoP successful - recipient verified');
-
-            } catch (copError) {
-                logger.warn({ error: copError.message }, 'CoP failed');
-                return res.status(400).json({
-                    error: 'COP_FAILED',
-                    message: `Could not verify recipient: ${copError.message}`,
-                    uetr,
-                });
-            }
-        }
-
-        // =================================================================
-        // Step 3-6: Get FX Quotes
+        // Step 3-6: Get FX Quotes FIRST (per Nexus documentation)
         // Reference: NotebookLM - GET /quotes (must call each time amount changes)
         // Quote expiry: 10 minutes (600 seconds)
         // =================================================================
@@ -244,6 +204,47 @@ app.post('/demo/initiate-payment', async (req, res) => {
             `${config.nexusGatewayUrl}/v1/quotes/${selectedQuote.quoteId}/intermediary-agents`
         );
         const agents = agentsResponse.data;
+
+        // =================================================================
+        // Step 7-9: Confirmation of Payee (CoP) - Proxy Resolution
+        // Reference: NotebookLM - POST /iso20022/acmt023
+        // NOTE: Per Nexus spec, this happens AFTER quotes so sender sees cost before verifying recipient
+        // =================================================================
+        logger.info('Step 7-9: Confirmation of Payee (CoP)');
+
+        let creditorName, creditorAccount;
+
+        if (creditorIdentifierType === 'ACCT') {
+            // Direct account number - no resolution needed
+            creditorAccount = creditorIdentifier;
+            creditorName = req.body.creditorName || 'Unknown Recipient';
+        } else {
+            // Proxy resolution required (mobile, email, etc.)
+            try {
+                const copResponse = await resolveProxy({
+                    proxyType: creditorIdentifierType,
+                    proxyValue: creditorIdentifier,
+                    destinationCountry: creditorCountry,
+                    senderIdHash,
+                });
+
+                creditorName = copResponse.displayName;
+                creditorAccount = copResponse.accountNumber;
+
+                logger.info({
+                    proxyType: creditorIdentifierType,
+                    displayName: creditorName,
+                }, 'CoP successful - recipient verified');
+
+            } catch (copError) {
+                logger.warn({ error: copError.message }, 'CoP failed');
+                return res.status(400).json({
+                    error: 'COP_FAILED',
+                    message: `Could not verify recipient: ${copError.message}`,
+                    uetr,
+                });
+            }
+        }
 
         // =================================================================
         // Step 10-11: Sanctions Screening

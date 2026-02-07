@@ -4,6 +4,7 @@
     "description": "Nexus PDO (Proxy Directory Operator) Simulator",
     "main": "src/index.js",
     "type": "module",
+    "license": "MIT",
     "scripts": {
         "start": "node src/index.js",
         "dev": "node --watch src/index.js"

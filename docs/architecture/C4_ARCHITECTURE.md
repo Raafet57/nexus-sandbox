@@ -2,6 +2,15 @@
 
 > This document provides comprehensive C4 model architecture diagrams for the Nexus Global Payments (NGP) cross-border instant payment platform.
 
+> [!NOTE]
+> **Sandbox vs Production**: This document describes the **target production architecture** based on official Nexus specifications. The sandbox implementation uses a simplified stack:
+> - **Backend**: Python 3.11+ / FastAPI (vs Go/Java in production)
+> - **Protocol**: REST/JSON (vs gRPC in production)  
+> - **Deployment**: Docker Compose (vs Kubernetes in production)
+> - **Messaging**: Direct HTTP callbacks (vs Kafka in production)
+>
+> See [README.md](../../README.md) for the actual sandbox technology stack.
+
 ## Overview
 
 The C4 model (Context, Container, Component, Code) provides a hierarchical approach to describing software architecture. This document covers the first three levels of abstraction for the Nexus system.

@@ -72,16 +72,36 @@ export async function getQuotes(
 }
 
 // Fee disclosure API - uses cached mock quote for dynamic fees
-export async function getPreTransactionDisclosure(quoteId: string) {
+// Supports INVOICED/DEDUCTED fee types per Nexus specification Phase 2
+export async function getPreTransactionDisclosure(quoteId: string, sourceFeeType: "INVOICED" | "DEDUCTED" = "INVOICED") {
     if (MOCK_ENABLED) {
-        const fees = mock.getMockFeeBreakdown(quoteId);
+        const fees = mock.getMockFeeBreakdown(quoteId, sourceFeeType);
         if (!fees) {
             throw new Error(`Quote ${quoteId} not found or expired. Please search for new quotes.`);
         }
         return fees as any;
     }
+    const queryParams = new URLSearchParams();
+    queryParams.set("quoteId", quoteId);
+    queryParams.set("sourceFeeType", sourceFeeType);
     return fetchJSON<import("../types").FeeBreakdown>(
-        `/v1/fees-and-amounts?quoteId=${quoteId}`
+        `/v1/fees-and-amounts?${queryParams.toString()}`
+    );
+}
+
+// Step 12: Confirm Sender Approval (Gate for pacs.008)
+// Mock mode now validates quote expiry like the real backend
+export async function confirmSenderApproval(quoteId: string): Promise<import("../types").SenderConfirmationResponse> {
+    if (MOCK_ENABLED) {
+        // Use proper quote validation (checks expiry)
+        return mock.recordSenderConfirmation(quoteId);
+    }
+    return fetchJSON<import("../types").SenderConfirmationResponse>(
+        "/v1/fees/sender-confirmation",
+        {
+            method: "POST",
+            body: JSON.stringify({ quoteId })
+        }
     );
 }
 
@@ -103,39 +123,83 @@ export async function getAddressTypes(countryCode: string) {
             }))
         };
     }
-    return fetchJSON<{ countryCode: string; addressTypes: import("../types").AddressTypeWithInputs[] }>(
+    // Transform backend format to frontend format
+    // Backend returns nested structure (label.code, attributes.type)
+    // Frontend expects flat structure (fieldName, dataType)
+    const response = await fetchJSON<{ countryCode: string; addressTypes: any[] }>(
         `/v1/countries/${countryCode}/address-types-and-inputs`
     );
+
+    return {
+        countryCode: response.countryCode,
+        addressTypes: response.addressTypes.map(type => ({
+            addressTypeId: type.addressTypeId,
+            addressTypeName: type.addressTypeName,
+            inputs: (type.inputs || []).map((input: any) => ({
+                fieldName: input.attributes?.name || input.fieldName || 'value',
+                displayLabel: input.label?.title?.en || input.label?.code || input.displayLabel || 'Value',
+                dataType: input.attributes?.type || input.dataType || 'text',
+                attributes: input.attributes || {}
+            }))
+        }))
+    };
 }
 
 // Proxy resolution (acmt.023)
-export async function resolveProxy(
-    country: string,
-    type: string,
-    value: string,
-    structuredData?: Record<string, string>
-): Promise<import("../types").ProxyResolutionResult> {
+// Accepts object parameter to match hook call pattern
+export async function resolveProxy(params: {
+    destinationCountry: string;
+    proxyType: string;
+    proxyValue: string;
+    structuredData?: Record<string, string>;
+    scenarioCode?: string;
+}): Promise<import("../types").ProxyResolutionResult> {
+    const { destinationCountry, proxyType, proxyValue, structuredData, scenarioCode } = params;
     if (MOCK_ENABLED) {
+        // Handle unhappy flow scenarios in mock mode
+        if (scenarioCode && scenarioCode.toLowerCase() !== 'happy') {
+            const scenarioMap: Record<string, { status: string; statusReasonCode: string; displayName: string }> = {
+                'be23': { status: 'RJCT', statusReasonCode: 'BE23', displayName: 'Invalid proxy identifier' },
+                'ac04': { status: 'RJCT', statusReasonCode: 'AC04', displayName: 'Account closed' },
+                'rr04': { status: 'RJCT', statusReasonCode: 'RR04', displayName: 'Regulatory reason' },
+            };
+            const scenario = scenarioMap[scenarioCode.toLowerCase()];
+            if (scenario) {
+                return {
+                    status: scenario.status,
+                    statusReasonCode: scenario.statusReasonCode,
+                    displayName: scenario.displayName,
+                } as any;
+            }
+        }
         return {
             status: "VALIDATED",
             resolutionId: "mock-res-123",
             accountNumber: "1234567890",
             accountType: "BBAN",
-            agentBic: country === "TH" ? "BKKBTHBK" : "MAYBMYKL",
+            agentBic: destinationCountry === "TH" ? "KASITHBK" : "MABORKKL",
             beneficiaryName: "Mock Beneficiary",
             displayName: "M. Beneficiary",
             verified: true,
             timestamp: new Date().toISOString()
         } as any;
     }
+    const queryParams = new URLSearchParams();
+    if (scenarioCode && scenarioCode !== 'happy') {
+        queryParams.set('scenarioCode', scenarioCode);
+    }
+    const url = queryParams.toString()
+        ? `/v1/addressing/resolve?${queryParams.toString()}`
+        : '/v1/addressing/resolve';
+
     return fetchJSON<import("../types").ProxyResolutionResult>(
-        "/v1/addressing/resolve",
+        url,
         {
             method: "POST",
             body: JSON.stringify({
-                destinationCountry: country,
-                proxyType: type,
-                proxyValue: value,
+                destinationCountry,
+                proxyType,
+                proxyValue,
                 structuredData
             }),
         }
@@ -158,6 +222,13 @@ export interface Pacs008Params {
     creditorName: string;
     creditorAccount: string;
     creditorAgentBic: string;
+    // Mandatory fields per Nexus spec
+    acceptanceDateTime?: string;  // AccptncDtTm - ISO 8601 timestamp
+    instructionPriority?: "HIGH" | "NORM";  // InstrPrty - HIGH (25s) or NORM (4hr)
+    clearingSystemCode?: string;  // ClrSys - e.g., "SGFAST", "THBRT"
+    intermediaryAgent1Bic?: string;  // IntrmyAgt1 - Source SAP BIC
+    intermediaryAgent2Bic?: string;  // IntrmyAgt2 - Destination SAP BIC
+    paymentReference?: string;  // RmtInf/Strd/CdtrRefInf/Ref - Sender message
     // For scenario injection (demo purposes)
     scenarioCode?: string;
 }
@@ -171,16 +242,82 @@ export interface Pacs008Response {
     processedAt: string;
 }
 
+/**
+ * Escapes XML special characters to prevent injection attacks
+ * 
+ * @param str - Raw string to escape
+ * @returns XML-safe string with special characters properly escaped
+ * 
+ * Reference: https://www.w3.org/TR/xml/#syntax
+ * Characters that must be escaped in XML:
+ * - & (ampersand) -> &amp;
+ * - < (less than) -> &lt;
+ * - > (greater than) -> &gt;
+ * - " (double quote) -> &quot;
+ * - ' (apostrophe) -> &apos;
+ */
+function escapeXml(str: string): string {
+    return str
+        .replace(/&/g, '&amp;')   // Must be first to avoid double-escaping
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
 // Build ISO 20022 pacs.008.001.13 XML per Nexus specification
-// Reference: XSD CreditTransferTransaction70 element order + Nexus docs for AgrdRate/QtId
+// Reference: XSD CreditTransferTransaction70 element order + Nexus docs for mandatory fields
+// Missing fields added per EXTENSIVE_PARITY_REVIEW_REPORT.md:
+// - AccptncDtTm (Acceptance Date Time) - MANDATORY in pacs.008.001.13
+// - ClrSys (Clearing System) - Required for settlement
+// - InstrPrty (Instruction Priority) - HIGH (25s) or NORM (4hr)
+// - IntrmyAgt1/2 (Intermediary Agents) - Source/Destination SAPs
+// - RmtInf/Strd/CdtrRefInf/Ref (Payment Reference) - Step 12 sender message
 function buildPacs008Xml(params: Pacs008Params): string {
     const now = new Date().toISOString();
     const msgId = `MSG${Date.now()}`;
     const endToEndId = `E2E${Date.now()}`;
 
+    // Use provided values or generate defaults
+    const acceptanceDateTime = params.acceptanceDateTime || now;
+    const instructionPriority = params.instructionPriority || "NORM";
+    const clearingSystemCode = params.clearingSystemCode || "";
+
+    // Build intermediary agents XML if provided
+    let intermediaryAgentsXml = "";
+    if (params.intermediaryAgent1Bic) {
+        intermediaryAgentsXml += `
+      <IntrmyAgt1>
+        <FinInstnId>
+          <BICFI>${escapeXml(params.intermediaryAgent1Bic)}</BICFI>
+        </FinInstnId>
+      </IntrmyAgt1>`;
+    }
+    if (params.intermediaryAgent2Bic) {
+        intermediaryAgentsXml += `
+      <IntrmyAgt2>
+        <FinInstnId>
+          <BICFI>${escapeXml(params.intermediaryAgent2Bic)}</BICFI>
+        </FinInstnId>
+      </IntrmyAgt2>`;
+    }
+
+    // Build payment reference (remittance info) if provided
+    let remittanceInfoXml = "";
+    if (params.paymentReference) {
+        remittanceInfoXml = `
+      <RmtInf>
+        <Strd>
+          <CdtrRefInf>
+            <Ref>${escapeXml(params.paymentReference.substring(0, 140))}</Ref>
+          </CdtrRefInf>
+        </Strd>
+      </RmtInf>`;
+    }
+
     // Element order follows XSD CreditTransferTransaction70:
     // PmtId → IntrBkSttlmAmt → IntrBkSttlmDt → InstdAmt → XchgRate → AgrdRate → ChrgBr 
-    //   → Dbtr → DbtrAcct → DbtrAgt → CdtrAgt → Cdtr → CdtrAcct
+    //   → Dbtr → DbtrAcct → DbtrAgt → IntrmyAgt1 → IntrmyAgt2 → CdtrAgt → Cdtr → CdtrAcct → RmtInf
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
@@ -189,52 +326,62 @@ function buildPacs008Xml(params: Pacs008Params): string {
       <CreDtTm>${now}</CreDtTm>
       <NbOfTxs>1</NbOfTxs>
       <SttlmInf>
-        <SttlmMtd>INDA</SttlmMtd>
+        <SttlmMtd>INDA</SttlmMtd>${clearingSystemCode ? `
+        <ClrSys>
+          <Cd>${escapeXml(clearingSystemCode)}</Cd>
+        </ClrSys>` : ""}
       </SttlmInf>
     </GrpHdr>
     <CdtTrfTxInf>
       <PmtId>
-        <InstrId>${params.quoteId}</InstrId>
+        <InstrId>${escapeXml(params.quoteId)}</InstrId>
         <EndToEndId>${endToEndId}</EndToEndId>
-        <UETR>${params.uetr}</UETR>
+        <UETR>${escapeXml(params.uetr)}</UETR>
       </PmtId>
-      <IntrBkSttlmAmt Ccy="${params.sourceCurrency}">${params.sourceAmount.toFixed(2)}</IntrBkSttlmAmt>
+      <PmtTpInf>
+        <InstrPrty>${instructionPriority}</InstrPrty>
+      </PmtTpInf>
+      <AccptncDtTm>${acceptanceDateTime}</AccptncDtTm>
+      <IntrBkSttlmAmt Ccy="${escapeXml(params.sourceCurrency)}">${params.sourceAmount.toFixed(2)}</IntrBkSttlmAmt>
       <IntrBkSttlmDt>${now.split('T')[0]}</IntrBkSttlmDt>
-      <InstdAmt Ccy="${params.destinationCurrency}">${params.destinationAmount.toFixed(2)}</InstdAmt>
+      <InstdAmt Ccy="${escapeXml(params.destinationCurrency)}">${params.destinationAmount.toFixed(2)}</InstdAmt>
       <XchgRateInformation>
         <XchgRate>${params.exchangeRate}</XchgRate>
+        <AgrdRate>
+          <QtId>${escapeXml(params.quoteId)}</QtId>
+        </AgrdRate>
       </XchgRateInformation>
       <ChrgBr>SHAR</ChrgBr>
       <Dbtr>
-        <Nm>${params.debtorName}</Nm>
+        <Nm>${escapeXml(params.debtorName)}</Nm>
       </Dbtr>
       <DbtrAcct>
         <Id>
           <Othr>
-            <Id>${params.debtorAccount}</Id>
+            <Id>${escapeXml(params.debtorAccount)}</Id>
           </Othr>
         </Id>
       </DbtrAcct>
       <DbtrAgt>
         <FinInstnId>
-          <BICFI>${params.debtorAgentBic}</BICFI>
+          <BICFI>${escapeXml(params.debtorAgentBic)}</BICFI>
         </FinInstnId>
-      </DbtrAgt>
+      </DbtrAgt>${intermediaryAgentsXml}
       <CdtrAgt>
         <FinInstnId>
-          <BICFI>${params.creditorAgentBic}</BICFI>
+          <BICFI>${escapeXml(params.creditorAgentBic)}</BICFI>
         </FinInstnId>
       </CdtrAgt>
       <Cdtr>
-        <Nm>${params.creditorName}</Nm>
+        <Nm>${escapeXml(params.creditorName)}</Nm>
       </Cdtr>
       <CdtrAcct>
         <Id>
           <Othr>
-            <Id>${params.creditorAccount}</Id>
+            <Id>${escapeXml(params.creditorAccount)}</Id>
           </Othr>
         </Id>
-      </CdtrAcct>
+      </CdtrAcct>${remittanceInfoXml}
     </CdtTrfTxInf>
   </FIToFICstmrCdtTrf>
 </Document>`;
@@ -387,6 +534,9 @@ export interface QRParseResult {
 }
 
 export async function parseQRCode(qrData: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockParseQRCode(qrData);
+    }
     return fetchJSON<QRParseResult>("/v1/qr/parse", {
         method: "POST",
         body: JSON.stringify({ qrData }),
@@ -403,6 +553,9 @@ export async function generateQRCode(params: {
     reference?: string;
     editable?: boolean;
 }) {
+    if (MOCK_ENABLED) {
+        return mock.mockGenerateQRCode(params);
+    }
     return fetchJSON<{ qrData: string; scheme: string }>("/v1/qr/generate", {
         method: "POST",
         body: JSON.stringify(params),
@@ -410,6 +563,9 @@ export async function generateQRCode(params: {
 }
 
 export async function validateQRCode(qrData: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockValidateQRCode(qrData);
+    }
     return fetchJSON<{ valid: boolean; crcValid: boolean; formatValid: boolean; errors: string[] }>(
         "/v1/qr/validate",
         {
@@ -431,6 +587,9 @@ export interface UPIData {
 }
 
 export async function parseUPI(upiUri: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockParseUPI(upiUri);
+    }
     return fetchJSON<{ valid: boolean; data?: UPIData; error?: string }>("/v1/qr/upi/parse", {
         method: "POST",
         body: JSON.stringify({ upiUri }),
@@ -438,6 +597,9 @@ export async function parseUPI(upiUri: string) {
 }
 
 export async function upiToEMVCo(upiUri: string, merchantCity?: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockUpiToEMVCo(upiUri, merchantCity);
+    }
     return fetchJSON<{ emvcoData: string; scheme: string }>("/v1/qr/upi/to-emvco", {
         method: "POST",
         body: JSON.stringify({ upiUri, merchantCity }),
@@ -445,6 +607,9 @@ export async function upiToEMVCo(upiUri: string, merchantCity?: string) {
 }
 
 export async function emvcoToUPI(emvcoData: string) {
+    if (MOCK_ENABLED) {
+        return mock.mockEmvcoToUPI(emvcoData);
+    }
     return fetchJSON<{ upiUri: string; scheme: string }>("/v1/qr/emvco/to-upi", {
         method: "POST",
         body: JSON.stringify({ emvcoData }),
@@ -632,12 +797,18 @@ export interface PurgeResult {
 }
 
 export async function getDemoDataStats(): Promise<DemoDataStats> {
+    if (MOCK_ENABLED) {
+        return mock.getMockDemoDataStats();
+    }
     return fetchJSON<DemoDataStats>("/v1/demo-data/stats");
 }
 
 export async function purgeDemoData(
     options: { ageHours?: number; includeQuotes?: boolean; dryRun?: boolean } = {}
 ): Promise<PurgeResult> {
+    if (MOCK_ENABLED) {
+        return mock.purgeMockDemoData(options);
+    }
     const params = new URLSearchParams();
     if (options.ageHours !== undefined) params.set("age_hours", options.ageHours.toString());
     if (options.includeQuotes !== undefined) params.set("includeQuotes", options.includeQuotes.toString());
@@ -664,11 +835,38 @@ export async function getActors(): Promise<{ actors: Actor[]; total: number }> {
     return fetchJSON<{ actors: Actor[]; total: number }>("/v1/actors");
 }
 
+export async function registerActor(actor: import("../types").ActorRegistration): Promise<import("../types").Actor> {
+    if (MOCK_ENABLED) {
+        // Create full actor object
+        const newActor: import("../types").Actor = {
+            ...actor,
+            actorId: `mock-${Date.now()}`,
+            registeredAt: new Date().toISOString(),
+            status: "ACTIVE",
+            bic: actor.bic // Ensure BIC is passed
+        };
+
+        // Add to persistent mock store
+        try {
+            // Cast to any to bypass strict literal type check for mock data
+            mock.addMockActor(newActor as any);
+        } catch (e) {
+            // Ignore duplicates for idempotency or re-throw if needed
+            console.warn("Actor might already exist:", e);
+        }
+
+        return newActor;
+    }
+    return fetchJSON<import("../types").Actor>("/v1/actors/register", {
+        method: "POST",
+        body: JSON.stringify(actor),
+    });
+}
+
 // ISO 20022 Templates API
 export async function getIsoTemplates() {
     if (MOCK_ENABLED) {
-        // Return static templates from mock data if needed, or empty object if not mocked yet
-        return {};
+        return mock.mockIsoTemplates;
     }
     return fetchJSON<Record<string, any>>("/v1/iso20022/templates");
 }

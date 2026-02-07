@@ -2,6 +2,9 @@
 
 > This document defines the observability stack for Nexus Global Payments, covering distributed tracing, metrics collection, SLO implementation, and alerting strategies.
 
+> [!NOTE]
+> **Sandbox Implementation**: The sandbox provides basic Jaeger tracing at `http://localhost:16686`. This document describes a **full production observability stack** (OpenTelemetry, Prometheus, Grafana, Loki) not currently implemented in the sandbox. See [README.md](../../README.md) for sandbox access points.
+
 ## Observability Pillars
 
 | Pillar | Technology | Purpose |

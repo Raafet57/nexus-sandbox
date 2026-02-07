@@ -26,6 +26,7 @@ import {
     Text,
     Button,
     Select,
+    SegmentedControl,
     Badge,
     Box,
     SimpleGrid,
@@ -63,7 +64,16 @@ import {
     IconAlertTriangle,
     IconCode,
 } from "@tabler/icons-react";
-import { getCountries, getQuotes, getPreTransactionDisclosure, resolveProxy, submitPacs008 } from "../services/api";
+import {
+    getCountries,
+    getQuotes,
+    getPreTransactionDisclosure,
+    resolveProxy,
+    submitPacs008,
+    confirmSenderApproval,
+    getIntermediaryAgents
+} from "../services/api";
+import { ActorRegistrationModal } from "../components/ActorRegistrationModal";
 import type { Quote, FeeBreakdown, Country } from "../types";
 
 // ============================================================================
@@ -72,10 +82,10 @@ import type { Quote, FeeBreakdown, Country } from "../types";
 
 // Default PSP BICs by country (for demo fallback when proxy resolution doesn't return BIC)
 const DEFAULT_PSP_BIC: Record<string, string> = {
-    "SG": "DBSGSGSG",  // DBS Singapore
-    "TH": "BKKBTHBK",  // Bangkok Bank Thailand
+    "SG": "DBSSSGSG",  // DBS Singapore
+    "TH": "KASITHBK",  // Kasikorn Bank Thailand
     "ID": "BMRIIDJA",  // Bank Mandiri Indonesia
-    "MY": "MAYBMYKL",  // Maybank Malaysia
+    "MY": "MABORKKL",  // Maybank Malaysia
     "PH": "BPIKIDJX",  // BPI Philippines
     "IN": "SBININBB",  // SBI India
 };
@@ -101,6 +111,8 @@ export function InteractiveDemo() {
     const [proxyType, setProxyType] = useState<string>("PHONE");
     const [proxyValue, setProxyValue] = useState<string>("+919123456789");
     const [scenario, setScenario] = useState<string>("happy");
+    const [sourceFeeType, setSourceFeeType] = useState<"INVOICED" | "DEDUCTED">("INVOICED");
+    const [actorModalOpen, setActorModalOpen] = useState(false);
 
     // Demo scenarios - validated via NotebookLM (Feb 4, 2026)
     const SCENARIOS = [
@@ -132,7 +144,11 @@ export function InteractiveDemo() {
             // Step 1-2: Resolve proxy
             setActive(0);
             await new Promise(r => setTimeout(r, 300));
-            const res = await resolveProxy("ID", "PHONE", "+6281234567890");
+            const res = await resolveProxy({
+                destinationCountry: "ID",
+                proxyType: "PHONE",
+                proxyValue: "+6281234567890"
+            });
             setResolution({ recipientName: res.beneficiaryName || res.displayName || "Budi Santoso", recipientPsp: res.bankName || "Bank Mandiri" });
 
             // Step 3-4: Get quotes (SG → ID corridor)
@@ -150,7 +166,7 @@ export function InteractiveDemo() {
             setSelectedQuote(bestQuote);
 
             // Step 7-9: Get PTD
-            const ptdData = await getPreTransactionDisclosure(bestQuote.quoteId);
+            const ptdData = await getPreTransactionDisclosure(bestQuote.quoteId, sourceFeeType);
             setPtd(ptdData);
             setActive(2);
             await new Promise(r => setTimeout(r, 500));
@@ -167,7 +183,7 @@ export function InteractiveDemo() {
                 destinationCurrency: "IDR",
                 debtorName: "Quick Demo Sender",
                 debtorAccount: "SG1234567890",
-                debtorAgentBic: "DBSGSGSG",
+                debtorAgentBic: "DBSSSGSG",
                 creditorName: "Budi Santoso",
                 creditorAccount: "+6281234567890",
                 creditorAgentBic: "BMRIIDJA",
@@ -259,7 +275,11 @@ export function InteractiveDemo() {
         setLoading(true);
         try {
             // Resolve proxy first
-            const res = await resolveProxy(destCountry, proxyType, proxyValue);
+            const res = await resolveProxy({
+                destinationCountry: destCountry,
+                proxyType,
+                proxyValue
+            });
             setResolution({ recipientName: res.beneficiaryName || res.displayName || "Demo Recipient", recipientPsp: res.bankName });
 
             // Then get quotes - use currencies from selected countries
@@ -277,26 +297,23 @@ export function InteractiveDemo() {
             }
 
             setActive(1);
-        } catch (err: any) {
-            // The original instruction was to update handleConfirmPayment, but the code snippet provided
-            // clearly targets the catch block of handleSearch based on the dependencies and surrounding code.
-            // The `setSteps` function is not defined in this component, so it's removed to maintain
-            // syntactical correctness and avoid runtime errors.
+        } catch (err) {
+            const error = err as Error & { statusReasonCode?: string; errors?: string[]; detail?: string };
             notifications.show({
-                title: `Payment Rejected (${err.statusReasonCode || 'RJCT'})`,
-                message: err.errors?.[0] || err.detail || 'Payment failed',
+                title: `Payment Rejected (${error.statusReasonCode || 'RJCT'})`,
+                message: error.errors?.[0] || error.detail || 'Payment failed',
                 color: "red"
             });
         } finally {
             setLoading(false);
         }
-    }, [sourceCountry, destCountry, amount, amountType, proxyType, proxyValue]);
+    }, [sourceCountry, destCountry, amount, amountType, proxyType, proxyValue, sourceFeeType]);
 
     const handleSelectQuote = useCallback(async (quote: Quote) => {
         setSelectedQuote(quote);
         setLoading(true);
         try {
-            const ptdData = await getPreTransactionDisclosure(quote.quoteId);
+            const ptdData = await getPreTransactionDisclosure(quote.quoteId, sourceFeeType);
             setPtd(ptdData);
             setActive(2);
         } catch (err) {
@@ -308,7 +325,7 @@ export function InteractiveDemo() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [sourceFeeType]);
 
     const handleConfirmPayment = useCallback(async () => {
         if (!selectedQuote || !resolution) return;
@@ -318,6 +335,24 @@ export function InteractiveDemo() {
         const uetr = crypto.randomUUID();
 
         try {
+            // STEP 12: Confirm Sender Approval
+            // This locks the quote and validates validation rules
+            const confirmation = await confirmSenderApproval(selectedQuote.quoteId);
+            if (!confirmation.proceedToExecution) {
+                throw new Error("Sender confirmation failed: " + confirmation.message);
+            }
+
+            notifications.show({
+                title: "Step 12: Confirmed",
+                message: "Sender approval recorded. Quote locked.",
+                color: "blue",
+                icon: <IconCheck size={16} />,
+            });
+
+            // STEP 13: Get Intermediary Agents (Routing)
+            // Necessary for constructing the pacs.008
+            const routing = await getIntermediaryAgents(selectedQuote.quoteId);
+
             // Get source country data for currency
             const sourceCountryData = countries.find(c => c.countryCode === sourceCountry);
             const destCountryData = countries.find(c => c.countryCode === destCountry);
@@ -329,6 +364,7 @@ export function InteractiveDemo() {
             // Parse exchange rate (Quote.exchangeRate is string)
             const exchangeRateNum = parseFloat(selectedQuote.exchangeRate);
 
+            // STEP 14: Submit Payment (pacs.008)
             // Build pacs.008 parameters from demo data
             const pacs008Params = {
                 uetr,
@@ -340,10 +376,13 @@ export function InteractiveDemo() {
                 destinationCurrency: destCurrency,
                 debtorName: "Demo Sender",
                 debtorAccount: "SG1234567890",
-                debtorAgentBic: "DBSGSGSG", // DBS Singapore
+                debtorAgentBic: "DBSSSGSG", // DBS Singapore
                 creditorName: resolution.recipientName || "Demo Recipient",
                 creditorAccount: proxyValue,
                 creditorAgentBic: resolution.recipientPsp || DEFAULT_PSP_BIC[destCountry] || "BMRIIDJA",
+                // Step 13 Data:
+                intermediaryAgent1Bic: routing.intermediaryAgent1?.bic,
+                intermediaryAgent2Bic: routing.intermediaryAgent2?.bic,
                 scenarioCode: scenario !== "happy" ? scenario : undefined,
             };
 
@@ -453,11 +492,19 @@ export function InteractiveDemo() {
                         >
                             Quick Demo
                         </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => setActorModalOpen(true)}
+                            leftSection={<IconUser size={16} />}
+                        >
+                            Register Actor
+                        </Button>
                         <Badge size="lg" variant="light" color="blue" leftSection={<IconPlayerPlay size={14} />}>
                             Live API Mode
                         </Badge>
                     </Group>
                 </Group>
+                <ActorRegistrationModal opened={actorModalOpen} onClose={() => setActorModalOpen(false)} />
             </Box>
 
             {/* Info Banner */}
@@ -559,6 +606,23 @@ export function InteractiveDemo() {
                                 leftSection={scenario === "happy" ? <IconCheck size={16} color="green" /> : <IconAlertTriangle size={16} color="orange" />}
                             />
 
+                            <Divider label="Fee Type" labelPosition="center" />
+
+                            <SegmentedControl
+                                fullWidth
+                                value={sourceFeeType}
+                                onChange={(v) => setSourceFeeType(v as "INVOICED" | "DEDUCTED")}
+                                data={[
+                                    { label: "INVOICED (Fee added)", value: "INVOICED" },
+                                    { label: "DEDUCTED (Fee from amount)", value: "DEDUCTED" }
+                                ]}
+                            />
+                            <Text size="xs" c="dimmed" ta="center">
+                                {sourceFeeType === "INVOICED"
+                                    ? "Fee is added on top - recipient gets full amount"
+                                    : "Fee is deducted from transfer - recipient gets less"}
+                            </Text>
+
                             <Button
                                 size="lg"
                                 onClick={handleSearch}
@@ -594,6 +658,7 @@ export function InteractiveDemo() {
                                         const expiresAt = new Date(quote.expiresAt).getTime();
                                         const remainingSecs = Math.max(0, Math.floor((expiresAt - now) / 1000));
                                         const progressPct = (remainingSecs / 600) * 100;
+                                        const isExpired = remainingSecs <= 0;
 
                                         return (
                                             <Card
@@ -601,24 +666,48 @@ export function InteractiveDemo() {
                                                 withBorder
                                                 p="md"
                                                 style={{
-                                                    cursor: "pointer",
+                                                    cursor: isExpired ? "not-allowed" : "pointer",
                                                     borderColor: selectedQuote?.quoteId === quote.quoteId
                                                         ? "var(--mantine-color-blue-filled)" : undefined,
+                                                    opacity: isExpired ? 0.6 : 1,
                                                 }}
-                                                onClick={() => handleSelectQuote(quote)}
+                                                onClick={() => {
+                                                    if (isExpired) {
+                                                        notifications.show({
+                                                            title: "Quote Expired",
+                                                            message: "This quote has expired. Please search for new quotes.",
+                                                            color: "red",
+                                                            icon: <IconX size={16} />,
+                                                        });
+                                                        return;
+                                                    }
+                                                    handleSelectQuote(quote);
+                                                }}
                                             >
                                                 <Group justify="space-between" mb="xs">
                                                     <Text fw={600}>{quote.fxpName}</Text>
-                                                    <Badge size="sm" color="blue">Best Rate</Badge>
+                                                    {isExpired ? (
+                                                        <Badge size="sm" color="red">EXPIRED</Badge>
+                                                    ) : (
+                                                        <Badge size="sm" color="blue">Best Rate</Badge>
+                                                    )}
                                                 </Group>
-                                                <Text size="lg" fw={700} c="green">
+                                                <Text size="lg" fw={700} c={isExpired ? "dimmed" : "green"}>
                                                     {destCountryData?.currencies[0]?.currencyCode} {Number(quote.creditorAccountAmount || quote.destinationInterbankAmount).toLocaleString()}
                                                 </Text>
                                                 <Text size="xs" c="dimmed">Net to recipient</Text>
                                                 <Group mt="sm" gap="xs">
-                                                    <Text size="xs">Rate: {Number(quote.exchangeRate).toFixed(4)}</Text>
-                                                    <Progress value={progressPct} size="xs" w={50} color={remainingSecs < 60 ? "red" : "blue"} />
-                                                    <Text size="xs" c={remainingSecs < 60 ? "red" : "dimmed"}>{Math.floor(remainingSecs / 60)}m</Text>
+                                                    <Text size="xs" c={isExpired ? "red" : undefined}>
+                                                        Rate: {Number(quote.exchangeRate).toFixed(4)}
+                                                    </Text>
+                                                    {isExpired ? (
+                                                        <Badge size="xs" color="red">Expired</Badge>
+                                                    ) : (
+                                                        <>
+                                                            <Progress value={progressPct} size="xs" w={50} color={remainingSecs < 60 ? "red" : "blue"} />
+                                                            <Text size="xs" c={remainingSecs < 60 ? "red" : "dimmed"}>{Math.floor(remainingSecs / 60)}m {remainingSecs % 60}s</Text>
+                                                        </>
+                                                    )}
                                                 </Group>
                                             </Card>
                                         );
@@ -671,7 +760,7 @@ export function InteractiveDemo() {
                                                 <Table.Td ta="right">{ptd.sourceCurrency} {Number(ptd.senderPrincipal).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
                                             </Table.Tr>
                                             <Table.Tr>
-                                                <Table.Td>Source PSP Fee</Table.Td>
+                                                <Table.Td>Source PSP Fee <Text span size="xs" c="dimmed">({sourceFeeType === "INVOICED" ? "Invoiced" : "Deducted"})</Text></Table.Td>
                                                 <Table.Td ta="right">{ptd.sourceCurrency} {Number(ptd.sourcePspFee).toLocaleString(undefined, { minimumFractionDigits: 2 })}</Table.Td>
                                             </Table.Tr>
                                             <Table.Tr>
@@ -706,7 +795,7 @@ export function InteractiveDemo() {
                                         <ScrollArea h={300} type="always" offsetScrollbars>
                                             <Code block style={{ whiteSpace: "pre", fontSize: "0.7rem", backgroundColor: 'transparent' }}>
                                                 {`<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.08">
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pacs.008.001.13">
   <FIToFICstmrCdtTrf>
     <GrpHdr>
       <MsgId>NEXUS-${Date.now()}</MsgId>
@@ -730,8 +819,8 @@ export function InteractiveDemo() {
       <ChrgBr>SHAR</ChrgBr>
       <Dbtr><Nm>Demo Sender</Nm></Dbtr>
       <DbtrAcct><Id><Othr><Id>SG1234567890</Id></Othr></Id></DbtrAcct>
-      <DbtrAgt><FinInstnId><BICFI>DBSGSGSG</BICFI></FinInstnId></DbtrAgt>
-      <IntermediaryAgent1><FinInstnId><BICFI>SRC-SAP-BIC</BICFI></FinInstnId></IntermediaryAgent1>
+      <DbtrAgt><FinInstnId><BICFI>DBSSSGSG</BICFI></FinInstnId></DbtrAgt>
+      <IntrmyAgt1><FinInstnId><BICFI>DBSSSGSG</BICFI></FinInstnId></IntrmyAgt1>
       <CdtrAgt><FinInstnId><BICFI>${resolution?.recipientPsp || DEFAULT_PSP_BIC[destCountry] || "BMRIIDJA"}</BICFI></FinInstnId></CdtrAgt>
       <Cdtr><Nm>${resolution?.recipientName || "Demo Recipient"}</Nm></Cdtr>
       <CdtrAcct><Id><Othr><Id>${proxyValue}</Id></Othr></Id></CdtrAcct>
