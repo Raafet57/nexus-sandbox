@@ -1,6 +1,8 @@
 { pkgs }: {
   deps = [
-    pkgs.nodejs-18_x
-    pkgs.nodePackages.npm
+    pkgs.nodejs_20
+    pkgs.python312
+    pkgs.postgresql_16
+    pkgs.redis
   ];
 }
