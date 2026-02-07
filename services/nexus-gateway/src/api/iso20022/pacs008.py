@@ -726,7 +726,26 @@ async def process_pacs008(
             pacs008_xml=xml_content,
             pacs002_xml=pacs002_xml
         )
-        
+
+        # Trigger callback for demo scenario rejection
+        if pacs002_endpoint:
+            try:
+                from ..callbacks import schedule_pacs002_delivery
+                import asyncio
+
+                asyncio.create_task(schedule_pacs002_delivery(
+                    callback_url=pacs002_endpoint,
+                    uetr=uetr,
+                    status="RJCT",
+                    reason_code=scenario_reason,
+                    additional_info=reason_desc,
+                    currency=parsed.get("settlementCurrency", "USD"),
+                    amount=str(parsed.get("settlementAmount", "0.00"))
+                ))
+                logger.info(f"Scheduled demo rejection callback for UETR {uetr}")
+            except Exception as e:
+                logger.error(f"Failed to schedule demo callback for UETR {uetr}: {e}")
+
         raise HTTPException(
             status_code=422,
             detail={
@@ -779,7 +798,26 @@ async def process_pacs008(
             pacs008_xml=xml_content,
             pacs002_xml=pacs002_xml
         )
-        
+
+        # Trigger callback delivery for rejected payment
+        if pacs002_endpoint:
+            try:
+                from ..callbacks import schedule_pacs002_delivery
+                import asyncio
+
+                asyncio.create_task(schedule_pacs002_delivery(
+                    callback_url=pacs002_endpoint,
+                    uetr=validation.uetr,
+                    status="RJCT",
+                    reason_code=validation.statusReasonCode,
+                    additional_info=validation.errors[0] if validation.errors else "Validation failed",
+                    currency=parsed.get("settlementCurrency", "USD"),
+                    amount=str(parsed.get("settlementAmount", "0.00"))
+                ))
+                logger.info(f"Scheduled pacs.002 rejection callback for UETR {validation.uetr}")
+            except Exception as e:
+                logger.error(f"Failed to schedule rejection callback for UETR {validation.uetr}: {e}")
+
         raise HTTPException(
             status_code=422,
             detail={
@@ -874,7 +912,28 @@ async def process_pacs008(
         pacs002_xml=pacs002_xml,
         camt054_xml=camt054_xml
     )
-    
+
+    # Trigger callback delivery for accepted payment
+    # This implements the callback mechanism per Nexus specification
+    if pacs002_endpoint:
+        try:
+            from ..callbacks import schedule_pacs002_delivery
+            import asyncio
+
+            # Schedule callback delivery asynchronously (don't wait for it)
+            asyncio.create_task(schedule_pacs002_delivery(
+                callback_url=pacs002_endpoint,
+                uetr=validation.uetr,
+                status="ACCC",
+                reason_code=None,
+                additional_info="Payment accepted and forwarded to destination IPS",
+                currency=parsed.get("settlementCurrency", "USD"),
+                amount=str(parsed.get("settlementAmount", "0.00"))
+            ))
+            logger.info(f"Scheduled pacs.002 callback for UETR {validation.uetr} to {pacs002_endpoint}")
+        except Exception as e:
+            logger.error(f"Failed to schedule callback for UETR {validation.uetr}: {e}")
+
     return Pacs008Response(
         uetr=validation.uetr,
         status="ACSC",
