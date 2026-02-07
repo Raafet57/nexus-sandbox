@@ -477,7 +477,15 @@ def build_pacs008(
           </CcyAndAmtTp>
         </EqvtAmt>
       </Amt>
-      <ChrgBr>SHAR</ChgrBr>{purpose_block}
+      <ChrgBr>SHAR</ChgrBr>
+      <ChrgsInf>
+        <Amt Ccy="{source_currency}">0.00</Amt>
+        <Agt>
+          <FinInstnId>
+            <BICFI>{debtor_bic}</BICFI>
+          </FinInstnId>
+        </Agt>
+      </ChrgsInf>{purpose_block}
       <InstgAgt>
         <FinInstnId>
           <BICFI>{debtor_bic}</BICFI>

@@ -101,7 +101,7 @@ async def process_acmt023(
     try:
         from lxml import etree
         root = etree.fromstring(xml_content.encode())
-        ns = {"doc": "urn:iso:std:iso:20022:tech:xsd:acmt.023.001.03"}
+        ns = {"doc": "urn:iso:std:iso:20022:tech:xsd:acmt.023.001.04"}
         
         def get_text(xpath, default=None):
             elements = root.xpath(xpath, namespaces=ns)
