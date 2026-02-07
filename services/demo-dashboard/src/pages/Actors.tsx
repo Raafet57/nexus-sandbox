@@ -47,7 +47,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 interface Actor {
     actorId: string;
     bic: string;
-    actorType: "FXP" | "IPS" | "PSP" | "SAP" | "PDO";
+    actorType: "FXP" | "IPSO" | "PSP" | "SAP" | "PDO";
     name: string;
     countryCode: string;
     callbackUrl: string | null;
@@ -57,7 +57,7 @@ interface Actor {
 
 const ACTOR_TYPE_COLORS: Record<string, string> = {
     FXP: "violet",
-    IPS: "blue",
+    IPSO: "blue",
     PSP: "green",
     SAP: "orange",
     PDO: "pink",
@@ -65,7 +65,7 @@ const ACTOR_TYPE_COLORS: Record<string, string> = {
 
 const ACTOR_TYPE_LABELS: Record<string, string> = {
     FXP: "FX Provider",
-    IPS: "IPS Operator",
+    IPSO: "IPS Operator",
     PSP: "Payment Service Provider",
     SAP: "Settlement Access Provider",
     PDO: "Proxy Directory Operator",
