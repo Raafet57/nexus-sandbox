@@ -7,10 +7,33 @@ REDIS_URL = "redis://localhost:6379"
 JWT_SECRET = "replit-dev-secret"
 QUOTE_VALIDITY_SECONDS = "600"
 PAYMENT_TIMEOUT_SECONDS = "60"
+OTEL_ENABLED = "false"
 
+# Frontend (Vite) - Mapped to external port 80
 [[ports]]
 localPort = 3000
 externalPort = 80
 
 [nix]
 channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash replit-start.sh"
+waitForPort = 3000
